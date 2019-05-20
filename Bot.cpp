@@ -13,6 +13,7 @@
 #include <queue>
 #include <chrono>
 #include <float.h>
+#include <assert.h>
 #include <cctype>
 
 using namespace std;
@@ -34,7 +35,6 @@ enum BuildingType
 	MINE,
 	TOWER
 };
-
 enum CommandType
 {
 	WAIT,
@@ -58,7 +58,6 @@ ostream& operator<<(ostream &os, CommandType cmdType)
 	}
 	return os;
 }
-
 class Stopwatch
 {
 public:
@@ -79,7 +78,6 @@ public:
 	string identifier;
 	chrono::time_point<chrono::high_resolution_clock> start;
 };
-
 template<typename T, typename priority_t> struct MinPriorityQueue
 {
 	struct CompareT
@@ -173,21 +171,6 @@ public:
 		return ((position.x + position.y) * (position.x + position.y + 1) / 2) + position.y;
 	}
 };
-vector<Position> vector_unique(vector<Position> positions)
-{
-	vector<Position> new_positions;
-
-	unordered_map<Position, bool, HashPosition> map;
-
-	for (auto& position : positions)
-		if (!map.count(position))
-		{
-			new_positions.push_back(position);
-			map[position] = true;
-		}
-
-	return new_positions;
-}
 
 class Objective
 {
@@ -429,7 +412,6 @@ public:
 				n++;
 		return n;
 	}
-
 	const Building& getHQ()
 	{
 		for (auto& b : buildings)
@@ -442,7 +424,25 @@ public:
 			if (b.isHQ() && !b.isOwned())
 				return b;
 	}
+	bool is_position_attainable(const Position& position)
+	{
+		if (get_cell_info(Position(position.x, position.y)) == 'O')
+			return true;
 
+		if (get_cell_info(Position(position.x, min(position.y + 1, width - 1))) == 'O')
+			return true;
+
+		if (get_cell_info(Position(position.x, max(position.y - 1, 0))) == 'O')
+			return true;
+
+		if (get_cell_info(Position(min(position.x + 1, height - 1), position.y)) == 'O')
+			return true;
+
+		if (get_cell_info(Position(max(position.x - 1, 0), position.y)) == 'O')
+			return true;
+
+		return false;
+	}
 
 	// Main functions
 	void debug()
@@ -492,14 +492,14 @@ public:
 			cerr << endl;
 		}
 
-		cerr << "Enemy score" << endl;
-		for (auto& row : score_enemy)
-		{
-			for (auto& cell : row)
-				cerr << cell;
+		//cerr << "Enemy score" << endl;
+		//for (auto& row : score_enemy)
+		//{
+		//	for (auto& cell : row)
+		//		cerr << cell;
 
-			cerr << endl;
-		}
+		//	cerr << endl;
+		//}
 	}
 	void init() 
 	{
@@ -631,22 +631,6 @@ public:
 			{
 				if (cell.is_occupied_by_enemy_hq())
 					cells_level[cell.position.y][cell.position.x] = 1;
-				else if (cell.is_occupied_by_enemy_tower())
-				{
-					cells_level[cell.position.y][cell.position.x] = 3;
-
-					if (get_cell_info(Position(cell.position.x, min(cell.position.y + 1, width - 1))) == 'X')
-						cells_level[min(cell.position.y + 1, width - 1)][cell.position.x] = 3;
-
-					if (get_cell_info(Position(cell.position.x, max(cell.position.y - 1, 0))) == 'X')
-						cells_level[max(cell.position.y - 1, 0)][cell.position.x] = 3;	
-
-					if (get_cell_info(Position(min(cell.position.x + 1, height - 1), cell.position.y)) == 'X')
-						cells_level[cell.position.y][min(cell.position.x + 1, height - 1)] = 3;
-
-					if (get_cell_info(Position(max(cell.position.x - 1, 0), cell.position.y)) == 'X')
-						cells_level[cell.position.y][max(cell.position.x - 1, 0)] = 3;
-				}
 				else if (cell.is_occupied_by_enemy_mine())
 					cells_level[cell.position.y][cell.position.x] = 1;
 				else if (cell.is_occupied_by_ally_mine())
@@ -662,6 +646,25 @@ public:
 				else
 					cells_level[cell.position.y][cell.position.x] = 1;
 			}
+
+			for (auto& row : cells)
+			for (auto& cell : row)
+				if (cell.is_occupied_by_enemy_tower())
+				{
+					cells_level[cell.position.y][cell.position.x] = 3;
+
+					if (get_cell_info(Position(cell.position.x, min(cell.position.y + 1, width - 1))) == 'X')
+						cells_level[min(cell.position.y + 1, width - 1)][cell.position.x] = 3;
+
+					if (get_cell_info(Position(cell.position.x, max(cell.position.y - 1, 0))) == 'X')
+						cells_level[max(cell.position.y - 1, 0)][cell.position.x] = 3;
+
+					if (get_cell_info(Position(min(cell.position.x + 1, height - 1), cell.position.y)) == 'X')
+						cells_level[cell.position.y][min(cell.position.x + 1, height - 1)] = 3;
+
+					if (get_cell_info(Position(max(cell.position.x - 1, 0), cell.position.y)) == 'X')
+						cells_level[cell.position.y][max(cell.position.x - 1, 0)] = 3;
+				}
 
 		// Adjacency list
 		adjacency_list.clear();
@@ -766,6 +769,8 @@ public:
 		cout << "WAIT" << endl;
 	}
 
+
+	// Buildings
 	void build_mines()
 	{
 		Stopwatch s("Build mines");
@@ -808,7 +813,7 @@ public:
 			pos = Position(10, 10);
 
 		for (auto& enemy : units_enemy)
-			if (Position::distance(enemy->p, hq_ally->p) <= 4)
+			if (Position::distance(enemy->p, hq_ally->p) <= 10)
 			{
 				commands.push_back(Command(BUILD, "TOWER", pos));
 				return;
@@ -992,6 +997,7 @@ public:
 					training_positions[pos] = get_score(make_shared<Unit>(Unit(pos.x, pos.y, 999, level, 0)), pos);
 		}
 	}
+
 
 	// Pathing
 	void generate_moves()
@@ -1417,59 +1423,110 @@ public:
 	// Chainkill
 	void attempt_chainkill()
 	{
-		if (turn != 20)
+		Stopwatch s("Chainkills");
+
+		unordered_map<Position, double, HashPosition> chainkills = dijkstra_chainkill_all_costs(hq_enemy->p, false);
+
+		if (!chainkills.size())
 			return;
 
-		unordered_map<Position, double, HashPosition> all_paths = dijkstra_all_paths(hq_enemy->p, false);
+		//for (auto& t : chainkills)
+		//{
+		//	string s1 = "";
+		//	s1 += t.first.print() + ": " + to_string(t.second);
+		//	cerr << s1 << endl;
+		//}
 
-		for (auto& t : all_paths)
+		double chainkill_cost = DBL_MAX;
+		Position chainkill_start;
+		for (auto& position : chainkills)
 		{
-			string s1 = "";
-			s1 += t.first.print() + ": " + to_string(t.second);
-			cerr << s1 << endl;
+			if (position.second < chainkill_cost && is_position_attainable(position.first))
+			{
+				chainkill_cost = position.second;
+				chainkill_start = position.first;
+			}
+		}
+
+		cerr << "Chainkill start: " << chainkill_start.print() << " cost: " << chainkill_cost << endl;
+
+		if (chainkill_cost <= gold_ally)
+		{
+			vector<Position> chainkill_path = dijkstra_chainkill_path(chainkill_start, hq_enemy->p);
+
+			//string s1;
+			//for (auto& t : chainkill_path)
+			//	s1 += t.print() + ", ";
+
+			//cerr << s1 << endl;
+
+			double score = 0.0;
+			for (auto& t : chainkill_path)
+				score += get_cells_level(t) * 10.0;
+
+			assert(score == chainkill_cost);
+
+			for (auto& t : chainkill_path)
+				commands.push_back(Command(TRAIN, get_cells_level(t), t));
 		}
 	}
-	unordered_map<Position, double, HashPosition> dijkstra_all_paths(const Position& source, bool debug)
+	unordered_map<Position, double, HashPosition> dijkstra_chainkill_all_costs(const Position& source, bool debug)
 	{
 		MinPriorityQueue<Position, double> frontier;
 		frontier.put(source, 0.0);
 
 		unordered_map<Position, double, HashPosition> cost_so_far;
-		cost_so_far[source] = 0.0;
+		cost_so_far[source] = 10.0;
 
 		while (!frontier.empty())
 		{
 			Position current = frontier.pop();
 
-			//if (debug)
-			//{
-			//	cerr << "current: " << current.print() << " ";
-			//	auto tt = get_adjacency_list(current);
-			//	cerr << tt.size();
-			//	for (auto& t : tt)
-			//		cerr << t.print();
-			//}
-
 			for (const Position& next : get_adjacency_list(current))
 			if (get_cell_info(next) != 'O')
 			{
-				double new_cost = cost_so_far[current] + get_cells_level(next);
-
-				//if (debug)
-				//	cerr << "next: " << next.print() << " s: " << new_cost << ", ";
+				double new_cost = cost_so_far[current] + get_cells_level(next) * 10.0;
 
 				if ((cost_so_far.find(next) == cost_so_far.end()) || (new_cost < cost_so_far[next]))
 				{
 					cost_so_far[next] = new_cost;
 					frontier.put(next, new_cost);
 				}
-
-				//if (debug)
-				//	cerr << endl;
 			}
 		}
 
 		return cost_so_far;
+	}
+	vector<Position> dijkstra_chainkill_path(const Position& source, const Position& target)
+	{
+		MinPriorityQueue<Position, double> frontier;
+		frontier.put(source, 0.0);
+
+		unordered_map<Position, double, HashPosition> cost_so_far;
+		cost_so_far[source] = 10.0;
+
+		unordered_map<Position, Position, HashPosition> came_from;
+		came_from[source] = source;
+
+		while (!frontier.empty())
+		{
+			Position current = frontier.pop();
+
+			for (const Position& next : get_adjacency_list(current))
+				if (get_cell_info(next) != 'O')
+				{
+					double new_cost = cost_so_far[current] + get_cells_level(next) * 10.0;
+
+					if ((cost_so_far.find(next) == cost_so_far.end()) || (new_cost < cost_so_far[next]))
+					{
+						cost_so_far[next] = new_cost;
+						frontier.put(next, new_cost);
+						came_from[next] = current;
+					}
+				}
+		}
+
+		return reconstruct_path(source, target, came_from);
 	}
 
 };
@@ -1484,7 +1541,7 @@ int main()
 		g.update_game();
 		g.update_gamestate();
 
-		//g.attempt_chainkill();
+		g.attempt_chainkill();
 		g.assign_objective_to_units();
 		g.generate_moves();
 
