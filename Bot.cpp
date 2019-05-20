@@ -3,6 +3,7 @@
 #include <vector>
 #include <list>
 #include <set>
+#include <map>
 #include <unordered_map>
 #include <algorithm>
 #include <queue>
@@ -22,6 +23,10 @@ const int tower_cost = 15;
 const int level_1_cost = 10;
 const int level_2_cost = 20;
 const int level_3_cost = 30;
+
+const int level_1_upkeep = 1;
+const int level_2_upkeep = 4;
+const int level_3_upkeep = 20;
 
 enum BuildingType
 {
@@ -168,6 +173,21 @@ public:
 		return ((position.x + position.y) * (position.x + position.y + 1) / 2) + position.y;
 	}
 };
+vector<Position> vector_unique(vector<Position> positions)
+{
+	vector<Position> new_positions;
+
+	unordered_map<Position, bool, HashPosition> map;
+
+	for (auto& position : positions)
+		if (!map.count(position))
+		{
+			new_positions.push_back(position);
+			map[position] = true;
+		}
+
+	return new_positions;
+}
 
 class Objective
 {
@@ -271,7 +291,7 @@ public:
 	bool is_occupied_by_unit() { return unit? true : false; }
 	bool is_occupied_by_building() { return building? true : false; }
 	bool is_occupied_by_enemy_building() { return is_occupied_by_building() && building->owner == 1; }
-	bool is_occupied_by_inacessible_building() { return is_occupied_by_building() && building->owner == 0 && (building->t == BuildingType::HQ || building->t == BuildingType::TOWER); }
+	bool is_occupied_by_inacessible_building() { return is_occupied_by_building() && building->owner == 0 && (building->t == BuildingType::HQ || building->t == BuildingType::MINE); }
 	bool is_occupied_by_enemy_tower() { return is_occupied_by_building() && building->owner == 1 && building->t == BuildingType::TOWER; }
 	bool is_occupied_by_enemy_hq() { return is_occupied_by_building() && building->owner == 1 && building->t == BuildingType::HQ; }
 	bool is_occupied_by_enemy_mine() { return is_occupied_by_building() && building->owner == 1 && building->t == BuildingType::MINE; }
@@ -316,7 +336,7 @@ public:
 	vector<vector<Cell>> cells;
 	vector<vector<char>> cells_info; // stores the chars representing the cell type
 	vector<vector<int>> cells_used_objective; // used for objective
-	vector<vector<int>> cells_used_movement; // used for objective
+	vector<vector<int>> cells_used_movement; // used for movement
 	vector<vector<int>> cells_level; // level required to move to cell
 
 	int gold_ally, income_ally;
@@ -327,8 +347,10 @@ public:
 	Cell& get_cell(const Position& position) { return cells[position.y][position.x]; }
 	int get_cells_used_movement(const Position& position) { return cells_used_movement[position.y][position.x]; }
 	int get_cells_level(const Position& position) { return cells_level[position.y][position.x]; }
+	int get_cells_used_objective(const Position& position) { return cells_used_objective[position.y][position.x]; }
 	char get_cell_info(const Position& position) { return cells_info[position.y][position.x]; }
 	vector<Position>& get_adjacency_list(const Position& position) { return adjacency_list.at(position); }
+	vector<Position>& get_adjacency_list_position_enemy(const Position& position) { return adjacency_list_position_enemy.at(position); }
 
 	bool can_train_level3() { return gold_ally >= 30 && income_ally >= 20; }
 	bool can_train_level2() { return gold_ally >= 20 && income_ally >= 4; }
@@ -351,6 +373,42 @@ public:
 			break;
 		}
 	}
+	int cost_of_unit(int level)
+	{
+		switch (level)
+		{
+		case 1:
+			return level_1_cost;
+			break;
+		case 2:
+			return level_2_cost;
+			break;
+		case 3:
+			return level_3_cost;
+			break;
+		default:
+			return 999;
+			break;
+		}
+	}
+	int upkeep_of_unit(int level)
+	{
+		switch (level)
+		{
+		case 1:
+			return level_1_upkeep;
+			break;
+		case 2:
+			return level_2_upkeep;
+			break;
+		case 3:
+			return level_3_upkeep;
+			break;
+		default:
+			return 999;
+			break;
+		}
+	}
 
 	const Building& getHQ()
 	{
@@ -364,6 +422,7 @@ public:
 			if (b.isHQ() && !b.isOwned())
 				return b;
 	}
+
 
 	// Main functions
 	void debug()
@@ -661,7 +720,6 @@ public:
 			adjacency_list_position_ally[position] = positions;
 		}
 	}
-
 	void send_commands()
 	{
 		Stopwatch s("Send commands");
@@ -669,78 +727,11 @@ public:
 		for_each(commands.begin(), commands.end(), [](Command &c) { c.print(); });
 		cout << "WAIT" << endl;
 	}
-	MaxPriorityQueue<Position, double> findTrainingPosition(int level)
-	{
-		Stopwatch s("Find Training Position");
 
-		vector<Position> positions_available;
-
-		for (int i = 0; i < width; i++)
-			for (int j = 0; j < height; j++)
-			{
-				Position pos = Position(i, j);
-				
-				if (get_cell_info(pos) == 'O' || get_cells_level(pos) > level || get_cells_used_movement(pos))
-					continue;
-
-				bool attainable = false;
-				for (int k = 0; k < width; k++)
-					for (int l = 0; l < height; l++)
-						if (Position::distance(pos, Position(k, l)) == 1 && get_cell_info(Position(k, l)) == 'O')
-						{
-							attainable = true;
-							break;
-						}
-
-				if (attainable)
-					positions_available.push_back(pos);
-			};
-
-		//string s1 = "can spawn to:";
-		//for (auto& p : positions_available)
-		//	s1 += p.print() + ", ";
-
-		//cerr << s1 << endl;
-
-		MaxPriorityQueue<Position, double> positions_for_spawn;
-		for (auto& pos : positions_available)
-			positions_for_spawn.put(pos, get_score(make_shared<Unit>(Unit(pos.x, pos.y, 999, 1, 0)), pos));
-
-		return positions_for_spawn;
-	}
-	void train_units()
-	{
-		Stopwatch s("Train units");
-
-		bool can_recruit_lvl1 = units_ally.size() < 8;
-		bool can_recruit_lvl2 = false; //units_ally.size() < 12;
-		bool can_recruit_lvl3 = false; // units_ally.size() < 14;
-
-		MaxPriorityQueue<Position, double> training_positions = findTrainingPosition(1);
-
-		while (!training_positions.empty())
-		{
-			Position training_position = training_positions.pop();
-
-			if (can_train_level3() && can_recruit_lvl3)
-			{
-				commands.push_back(Command(TRAIN, 3, training_position));
-				gold_ally -= level_3_cost;
-			}
-			else if (can_train_level2() && can_recruit_lvl2)
-			{
-				commands.push_back(Command(TRAIN, 2, training_position));
-				gold_ally -= level_2_cost;
-			}
-			else if (can_train_level1() && can_recruit_lvl1)
-			{
-				commands.push_back(Command(TRAIN, 1, training_position));
-				gold_ally -= level_1_cost;
-			}
-		}
-	}
 	void build_mines()
 	{
+		// Make mines far from enemies
+
 		Stopwatch s("Build mines");
 
 		int nbr_mines = 0;
@@ -780,6 +771,98 @@ public:
 			}
 	}
 
+
+	// Training new units
+	unordered_map<Position, double, HashPosition> findTrainingPosition(int level)
+	{
+		Stopwatch s("Find Training Position");
+
+		vector<Position> positions_available;
+
+		for (int i = 0; i < width; i++)
+			for (int j = 0; j < height; j++)
+			{
+				Position pos = Position(i, j);
+
+				if (get_cell_info(pos) == 'O' || get_cells_level(pos) > level || get_cells_used_movement(pos))
+					continue;
+
+				bool attainable = false;
+				for (int k = 0; k < width; k++)
+					for (int l = 0; l < height; l++)
+						if (Position::distance(pos, Position(k, l)) == 1 && get_cell_info(Position(k, l)) == 'O')
+						{
+							attainable = true;
+							break;
+						}
+
+				if (attainable)
+					positions_available.push_back(pos);
+			};
+
+		//string s1 = "can spawn to:";
+		//for (auto& p : positions_available)
+		//	s1 += p.print() + ", ";
+
+		//cerr << s1 << endl;
+
+		unordered_map<Position, double, HashPosition> positions_for_spawn;
+		for (auto& pos : positions_available)
+			positions_for_spawn[pos] = get_score(make_shared<Unit>(Unit(pos.x, pos.y, 999, 1, 0)), pos);
+
+		return positions_for_spawn;
+	}
+	void train_units()
+	{
+		Stopwatch s("Train units");
+
+		bool can_recruit_lvl1 = units_ally.size() < 8;
+		bool can_recruit_lvl2 = false; //units_ally.size() < 12;
+		bool can_recruit_lvl3 = false; // units_ally.size() < 14;
+		int level = 1;
+
+		unordered_map<Position, double, HashPosition> training_positions = findTrainingPosition(level);
+
+		string s1;
+		for (auto& t : training_positions)
+			s1 += t.first.print() + " " + to_string(t.second) + " ";
+		cerr << s1;
+
+		while (training_positions.size())
+		{
+			auto max = max_element(training_positions.begin(), training_positions.end(), [](const pair<Position, double>& p1, const pair<Position, double>& p2) { return p1.second < p2.second; });
+			Position training_position = max->first;
+
+			if (can_train_level3() && can_recruit_lvl3)
+			{
+				commands.push_back(Command(TRAIN, 3, training_position));
+				gold_ally -= level_3_cost;
+				income_ally -= level_3_upkeep;
+			}
+			else if (can_train_level2() && can_recruit_lvl2)
+			{
+				commands.push_back(Command(TRAIN, 2, training_position));
+				gold_ally -= level_2_cost;
+				income_ally -= level_2_upkeep;
+			}
+			else if (can_train_level1() && can_recruit_lvl1)
+			{
+				commands.push_back(Command(TRAIN, 1, training_position));
+				gold_ally -= level_1_cost;
+				income_ally -= level_1_upkeep;
+			}
+			else
+				return;
+
+			cerr << training_position.print() << " " << max->second << endl;
+
+			for (auto& pos : get_adjacency_list(training_position))
+				if (get_cells_level(pos) <= level && !get_cells_used_movement(pos))
+					training_positions[pos] = get_score(make_shared<Unit>(Unit(pos.x, pos.y, 999, 1, 0)), pos);
+		}
+	}
+
+
 	// Pathing
 	void generate_moves()
 	{
@@ -789,7 +872,7 @@ public:
 		{
 			cerr << "Finding path for: " << unit->id << ", ";
 			Position target = unit->objective.target;
-			Position destination = get_path(unit, target, turn >= 12 && unit->id == 3);
+			Position destination = get_path(unit, target, false);
 			cells_used_movement[destination.y][destination.x] = 1;
 			cerr << "moving to " << destination.print() << endl;
 			commands.push_back(Command(MOVE, unit->id, destination));
@@ -908,7 +991,7 @@ public:
 	}
 	double get_score(const shared_ptr<Unit>& unit, const Position& pos)
 	{
-		if (unit->level < get_cells_level(pos) || cells_used_objective[pos.y][pos.x] || cells_used_movement[pos.y][pos.x] || tolower(cells_info[pos.y][pos.x]) == 'o')
+		if (unit->level < get_cells_level(pos) || cells_used_objective[pos.y][pos.x] || cells_used_movement[pos.y][pos.x] || cells_info[pos.y][pos.x] == 'O')
 			// not objective if not enough level, cell is already used, cell is already owned
 			return -DBL_MAX;
 		else
@@ -919,7 +1002,7 @@ public:
 
 			bool enemy_on_cell = get_cell(pos).is_occupied_by_enemy_unit();
 			bool enemy_building_on_cell = get_cell(pos).is_occupied_by_enemy_building();
-			bool enemy_territory = tolower(get_cell_info(pos));
+			bool enemy_territory = get_cell_info(pos) == 'X';
 
 			double score = 0.0;
 
@@ -928,7 +1011,7 @@ public:
 			score += (hq_enemy->p == pos) * 10.0;
 			score += enemy_on_cell * 10.0;
 			score += enemy_building_on_cell * 10.0;
-			score += enemy_territory * 10.0;
+			score += enemy_territory * 5.0;
 			score -= distance;
 
 			return score;
@@ -991,12 +1074,14 @@ public:
 			double cost = (double)(level_required * 10);
 			double score = gain - cost;
 
-			cerr << "Cut " << cut.print() << ": gain " << gain << ", cost: " << cost << ", score: " << score << endl;
+			cerr << "Cut: " << cut.print() << ", gain " << gain << ", cost: " << cost << ", score: " << score << endl;
 
 			if (score > 0 && level_required <= 3 && can_train_level(level_required))
 			{
 				commands.push_back(Command(TRAIN, level_required, cut));
 				cells_used_movement[cut.y][cut.x] = 1;
+				gold_ally -= cost_of_unit(level_required);
+				income_ally -= upkeep_of_unit(level_required);
 			}
 
 			cuts.elements.pop();
@@ -1197,6 +1282,66 @@ public:
 			}
 		}
 	}
+
+
+	// Chainkill
+	void attempt_chainkill()
+	{
+		if (turn != 20)
+			return;
+
+		unordered_map<Position, double, HashPosition> all_paths = dijkstra_all_paths(hq_enemy->p, false);
+
+		for (auto& t : all_paths)
+		{
+			string s1 = "";
+			s1 += t.first.print() + ": " + to_string(t.second);
+			cerr << s1 << endl;
+		}
+	}
+	unordered_map<Position, double, HashPosition> dijkstra_all_paths(const Position& source, bool debug)
+	{
+		MinPriorityQueue<Position, double> frontier;
+		frontier.put(source, 0.0);
+
+		unordered_map<Position, double, HashPosition> cost_so_far;
+		cost_so_far[source] = 0.0;
+
+		while (!frontier.empty())
+		{
+			Position current = frontier.pop();
+
+			//if (debug)
+			//{
+			//	cerr << "current: " << current.print() << " ";
+			//	auto tt = get_adjacency_list(current);
+			//	cerr << tt.size();
+			//	for (auto& t : tt)
+			//		cerr << t.print();
+			//}
+
+			for (const Position& next : get_adjacency_list(current))
+			if (get_cell_info(next) != 'O')
+			{
+				double new_cost = cost_so_far[current] + get_cells_level(next);
+
+				//if (debug)
+				//	cerr << "next: " << next.print() << " s: " << new_cost << ", ";
+
+				if ((cost_so_far.find(next) == cost_so_far.end()) || (new_cost < cost_so_far[next]))
+				{
+					cost_so_far[next] = new_cost;
+					frontier.put(next, new_cost);
+				}
+
+				//if (debug)
+				//	cerr << endl;
+			}
+		}
+
+		return cost_so_far;
+	}
+
 };
 
 int main()
@@ -1204,17 +1349,20 @@ int main()
 	Game g;
 	g.init();
 
-	while (true) 
+	while (true)
 	{
 		g.update_game();
 		g.update_gamestate();
 
+		//g.attempt_chainkill();
 		g.train_units_on_cuts();
+		g.train_units();
+
 		g.assign_objective_to_units();
+		g.generate_moves();
 
 		g.debug();
-		g.generate_moves();
-		g.train_units();
+
 		g.build_mines();
 		g.build_towers();
 
