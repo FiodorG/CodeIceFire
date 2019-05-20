@@ -301,6 +301,7 @@ public:
 	bool is_occupied_by_hq() { return is_occupied_by_building() && building->t == BuildingType::HQ; }
 	bool is_occupied_by_tower() { return is_occupied_by_building() && building->t == BuildingType::TOWER; }
 	bool is_occupied_by_enemy_unit() { return is_occupied_by_unit() && unit->owner == 1; }
+	bool is_occupied_by_enemy_unit_of_level(int level) { return is_occupied_by_unit() && unit->owner == 1 && unit->level == level; }
 	bool is_occupied_by_ally_unit() { return is_occupied_by_unit() && unit->owner == 0; }
 	int level_of_enemy_unit() { return is_occupied_by_enemy_unit()? unit->level : -1; }
 };
@@ -342,6 +343,7 @@ public:
 	int gold_ally, income_ally;
 	int gold_enemy, income_enemy;
 
+	vector<vector<double>> score_enemy;
 
 	// Utilities
 	Cell& get_cell(const Position& position) { return cells[position.y][position.x]; }
@@ -349,6 +351,7 @@ public:
 	int get_cells_level(const Position& position) { return cells_level[position.y][position.x]; }
 	int get_cells_used_objective(const Position& position) { return cells_used_objective[position.y][position.x]; }
 	char get_cell_info(const Position& position) { return cells_info[position.y][position.x]; }
+	double get_score_enemy(const Position& position) { return score_enemy[position.y][position.x]; }
 	vector<Position>& get_adjacency_list(const Position& position) { return adjacency_list.at(position); }
 	vector<Position>& get_adjacency_list_position_enemy(const Position& position) { return adjacency_list_position_enemy.at(position); }
 
@@ -409,6 +412,23 @@ public:
 			break;
 		}
 	}
+	int nbr_units_ally_of_level(int level)
+	{
+		int n = 0;
+		for (auto& unit : units_ally)
+			if (unit->level == level)
+				n++;
+
+		return n;
+	}
+	int nbr_mines_ally()
+	{
+		int n = 0;
+		for (auto& building : buildings_ally)
+			if (building->owner == 0 && building->t == BuildingType::MINE)
+				n++;
+		return n;
+	}
 
 	const Building& getHQ()
 	{
@@ -463,6 +483,7 @@ public:
 		//	cerr << endl;
 		//} 
 
+		cerr << "Level" << endl;
 		for (auto& row : cells_level)
 		{
 			for (auto& cell : row)
@@ -471,6 +492,14 @@ public:
 			cerr << endl;
 		}
 
+		cerr << "Enemy score" << endl;
+		for (auto& row : score_enemy)
+		{
+			for (auto& cell : row)
+				cerr << cell;
+
+			cerr << endl;
+		}
 	}
 	void init() 
 	{
@@ -719,6 +748,15 @@ public:
 
 			adjacency_list_position_ally[position] = positions;
 		}
+
+		score_enemy= vector<vector<double>>(width, vector<double>(height, 0.0));
+		for (auto& enemy : units_enemy)
+		{
+			for (int i = 0; i < width; i++)
+				for (int j = 0; j < height; j++)
+					if (Position::distance(enemy->p, Position(i, j)) <= 3)
+						score_enemy[j][i] += enemy->level;
+		}
 	}
 	void send_commands()
 	{
@@ -730,29 +768,35 @@ public:
 
 	void build_mines()
 	{
-		// Make mines far from enemies
-
 		Stopwatch s("Build mines");
 
-		int nbr_mines = 0;
-		for (auto& building : buildings_ally)
-			if (building->owner == 0 && building->t == BuildingType::MINE)
-				nbr_mines++;
+		int nbr_mines = nbr_mines_ally();
 
 		if (nbr_mines >= 3)
 			return;
 
-		int mine_cost = 20 + nbr_mines * 4;
-
+		unordered_map<Position, double, HashPosition> position_for_mines;
 		for (int i = 0; i < width; i++)
 			for (int j = 0; j < height; j++)
-				if (cells_info[j][i] == 'O' && cells[j][i].mine && !cells[j][i].is_occupied_by_building() && gold_ally >= mine_cost)
-				{
-					nbr_mines++;
-					mine_cost = 20 + nbr_mines * 4;
-					gold_ally -= mine_cost;
-					commands.push_back(Command(BUILD, "MINE", Position(i, j)));
-				}
+				if (cells_info[j][i] == 'O' && cells[j][i].mine && !cells[j][i].is_occupied_by_building())
+					position_for_mines[Position(i, j)] = -Position::distance(hq_ally->p, Position(i, j));
+
+		while (position_for_mines.size())
+		{
+			auto max = max_element(position_for_mines.begin(), position_for_mines.end(), [](const pair<Position, double>& p1, const pair<Position, double>& p2) { return p1.second < p2.second; });
+			Position position_for_mine = max->first;
+
+			if (gold_ally >= 20 + nbr_mines * 4)
+			{
+				gold_ally -= 20 + nbr_mines * 4;
+				nbr_mines++;
+				commands.push_back(Command(BUILD, "MINE", position_for_mine));
+			}
+			else
+				return;
+
+			position_for_mines.erase(position_for_mine);
+		}
 	}
 	void build_towers()
 	{
@@ -773,7 +817,34 @@ public:
 
 
 	// Training new units
-	unordered_map<Position, double, HashPosition> findTrainingPosition(int level)
+	double get_training_score(const shared_ptr<Unit>& unit, const Position& pos)
+	{
+		if (unit->level < get_cells_level(pos) || cells_used_objective[pos.y][pos.x] || cells_used_movement[pos.y][pos.x] || cells_info[pos.y][pos.x] == 'O')
+			// not objective if not enough level, cell is already used, cell is already owned
+			return -DBL_MAX;
+		else
+		{
+			int distance_to_hq_ally = Position::distance(pos, hq_ally->p);
+			int distance_to_enemy_hq = Position::distance(pos, hq_enemy->p);
+
+			bool enemy_on_cell = get_cell(pos).is_occupied_by_enemy_unit();
+			bool enemy_building_on_cell = get_cell(pos).is_occupied_by_enemy_building();
+			bool enemy_territory = get_cell_info(pos) == 'X';
+			bool is_enemy_hq = (hq_enemy->p == pos);
+
+			double score = 0.0;
+
+			score += (turn <= 3) ? -distance_to_hq_ally * 10.0 : distance_to_hq_ally;
+			score -= distance_to_enemy_hq;
+			score += is_enemy_hq * 10.0;
+			score += enemy_on_cell * 20.0;
+			score += enemy_building_on_cell * 20.0;
+			score += enemy_territory * 5.0;
+
+			return score;
+		}
+	}
+	unordered_map<Position, double, HashPosition> find_training_position_level_1(int level)
 	{
 		Stopwatch s("Find Training Position");
 
@@ -808,60 +879,119 @@ public:
 
 		unordered_map<Position, double, HashPosition> positions_for_spawn;
 		for (auto& pos : positions_available)
-			positions_for_spawn[pos] = get_score(make_shared<Unit>(Unit(pos.x, pos.y, 999, 1, 0)), pos);
+			positions_for_spawn[pos] = get_training_score(make_shared<Unit>(Unit(pos.x, pos.y, 999, 1, 0)), pos);
 
 		return positions_for_spawn;
 	}
-	void train_units()
+	void train_units_level_1()
 	{
-		Stopwatch s("Train units");
+		Stopwatch s("Train units level 1");
 
-		bool can_recruit_lvl1 = units_ally.size() < 8;
-		bool can_recruit_lvl2 = false; //units_ally.size() < 12;
-		bool can_recruit_lvl3 = false; // units_ally.size() < 14;
 		int level = 1;
+		bool can_recruit_lvl1 = nbr_units_ally_of_level(level) <= 8;
 
-		unordered_map<Position, double, HashPosition> training_positions = findTrainingPosition(level);
+		unordered_map<Position, double, HashPosition> training_positions = find_training_position_level_1(level);
 
-		string s1;
-		for (auto& t : training_positions)
-			s1 += t.first.print() + " " + to_string(t.second) + " ";
-		cerr << s1;
+		//string s1;
+		//for (auto& t : training_positions)
+		//	s1 += t.first.print() + " " + to_string(t.second) + " ";
+		//cerr << s1;
 
 		while (training_positions.size())
 		{
 			auto max = max_element(training_positions.begin(), training_positions.end(), [](const pair<Position, double>& p1, const pair<Position, double>& p2) { return p1.second < p2.second; });
 			Position training_position = max->first;
 
-			if (can_train_level3() && can_recruit_lvl3)
+			if (can_train_level1() && can_recruit_lvl1)
 			{
-				commands.push_back(Command(TRAIN, 3, training_position));
-				gold_ally -= level_3_cost;
-				income_ally -= level_3_upkeep;
-			}
-			else if (can_train_level2() && can_recruit_lvl2)
-			{
-				commands.push_back(Command(TRAIN, 2, training_position));
-				gold_ally -= level_2_cost;
-				income_ally -= level_2_upkeep;
-			}
-			else if (can_train_level1() && can_recruit_lvl1)
-			{
-				commands.push_back(Command(TRAIN, 1, training_position));
+				commands.push_back(Command(TRAIN, level, training_position));
 				gold_ally -= level_1_cost;
 				income_ally -= level_1_upkeep;
 			}
 			else
 				return;
 
-			cerr << training_position.print() << " " << max->second << endl;
+			training_positions.erase(training_position);
 
 			for (auto& pos : get_adjacency_list(training_position))
 				if (get_cells_level(pos) <= level && !get_cells_used_movement(pos))
-					training_positions[pos] = get_score(make_shared<Unit>(Unit(pos.x, pos.y, 999, 1, 0)), pos);
+					training_positions[pos] = get_score(make_shared<Unit>(Unit(pos.x, pos.y, 999, level, 0)), pos);
 		}
 	}
+	unordered_map<Position, double, HashPosition> find_training_position_level_2(int level)
+	{
+		Stopwatch s("Find Training Position");
 
+		vector<Position> positions_available;
+
+		for (int i = 0; i < width; i++)
+			for (int j = 0; j < height; j++)
+			{
+				Position pos = Position(i, j);
+
+				if (get_cell_info(pos) == 'O' || get_cells_level(pos) > level || get_cells_used_movement(pos) || !get_cell(pos).is_occupied_by_enemy_unit_of_level(1))
+					continue;
+
+				bool attainable = false;
+				for (int k = 0; k < width; k++)
+					for (int l = 0; l < height; l++)
+						if (Position::distance(pos, Position(k, l)) == 1 && get_cell_info(Position(k, l)) == 'O')
+						{
+							attainable = true;
+							break;
+						}
+
+				if (attainable)
+					positions_available.push_back(pos);
+			};
+
+		//string s1 = "can spawn to:";
+		//for (auto& p : positions_available)
+		//	s1 += p.print() + ", ";
+
+		//cerr << s1 << endl;
+
+		unordered_map<Position, double, HashPosition> positions_for_spawn;
+		for (auto& pos : positions_available)
+			positions_for_spawn[pos] = get_score_enemy(pos);
+
+		return positions_for_spawn;
+	}
+	void train_units_level_2()
+	{
+		Stopwatch s("Train units level 2");
+
+		int level = 2;
+		bool can_recruit_lvl2 = nbr_units_ally_of_level(level) <= 4;
+
+		unordered_map<Position, double, HashPosition> training_positions = find_training_position_level_2(level);
+
+		//string s1;
+		//for (auto& t : training_positions)
+		//	s1 += t.first.print() + " " + to_string(t.second) + " ";
+		//cerr << s1;
+
+		while (training_positions.size())
+		{
+			auto max = max_element(training_positions.begin(), training_positions.end(), [](const pair<Position, double>& p1, const pair<Position, double>& p2) { return p1.second < p2.second; });
+			Position training_position = max->first;
+
+			if (can_train_level2() && can_recruit_lvl2)
+			{
+				commands.push_back(Command(TRAIN, level, training_position));
+				gold_ally -= level_2_cost;
+				income_ally -= level_2_upkeep;
+			}
+			else
+				return;
+
+			training_positions.erase(training_position);
+
+			for (auto& pos : get_adjacency_list(training_position))
+				if (get_cells_level(pos) <= level && !get_cells_used_movement(pos))
+					training_positions[pos] = get_score(make_shared<Unit>(Unit(pos.x, pos.y, 999, level, 0)), pos);
+		}
+	}
 
 	// Pathing
 	void generate_moves()
@@ -997,7 +1127,7 @@ public:
 		else
 		{
 			int distance_to_hq_ally = Position::distance(pos, hq_ally->p);
-			int distance_to_enemy_ally = Position::distance(pos, hq_enemy->p);
+			int distance_to_enemy_hq = Position::distance(pos, hq_enemy->p);
 			int distance = Position::distance(unit->p, pos);
 
 			bool enemy_on_cell = get_cell(pos).is_occupied_by_enemy_unit();
@@ -1006,8 +1136,8 @@ public:
 
 			double score = 0.0;
 
-			//score -= distance_to_hq_ally * (distance_to_hq_ally <= 6);
-			score -= distance_to_enemy_ally * (distance_to_enemy_ally <= 6);
+			score += distance_to_hq_ally * (distance_to_hq_ally <= 3) * 100.0;
+			score -= distance_to_enemy_hq * (distance_to_enemy_hq <= 6);
 			score += (hq_enemy->p == pos) * 10.0;
 			score += enemy_on_cell * 10.0;
 			score += enemy_building_on_cell * 10.0;
@@ -1355,11 +1485,12 @@ int main()
 		g.update_gamestate();
 
 		//g.attempt_chainkill();
-		g.train_units_on_cuts();
-		g.train_units();
-
 		g.assign_objective_to_units();
 		g.generate_moves();
+
+		g.train_units_on_cuts();
+		g.train_units_level_2();
+		g.train_units_level_1();
 
 		g.debug();
 
