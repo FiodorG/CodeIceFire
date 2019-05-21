@@ -268,6 +268,7 @@ public:
 	inline void set_building(shared_ptr<Building> building) { this->building = building; }
 	inline void set_owner(int owner) { this->owner = owner; }
 	inline void set_mine() { this->mine = true; }
+	inline bool get_mine() { return this->mine; }
 	inline void set_void_cell() { this->void_cell = true; }
 	inline bool is_empty() { return !unit && !building; }
 	inline bool is_occupied() { return unit || building; }
@@ -287,8 +288,8 @@ public:
 	inline bool is_occupied_by_enemy_unit() { return is_occupied_by_unit() && unit->owner == 1; }
 	inline bool is_occupied_by_enemy_unit_of_level(int level) { return is_occupied_by_unit() && unit->owner == 1 && unit->level == level; }
 	inline bool is_occupied_by_ally_unit() { return is_occupied_by_unit() && unit->owner == 0; }
-	inline int level_of_enemy_unit() { return is_occupied_by_enemy_unit()? unit->level : -1; }
-	inline int level_of_ally_unit() { return is_occupied_by_ally_unit() ? unit->level : -1; }
+	inline int level_of_enemy_unit() { return is_occupied_by_enemy_unit()? unit->level : 0; }
+	inline int level_of_ally_unit() { return is_occupied_by_ally_unit() ? unit->level : 0; }
 };
 
 class Game
@@ -315,7 +316,6 @@ public:
 	vector<Position> positions_ally;
 	vector<Position> positions_enemy;
 
-	//array<array<int, width * height>, width * height> distances;
 	int distances[width * height][width * height];
 
 	unordered_map<Position, vector<Position>, HashPosition> adjacency_list;
@@ -332,7 +332,8 @@ public:
 	int gold_ally, income_ally;
 	int gold_enemy, income_enemy;
 
-	vector<vector<double>> score_enemy;
+	double score_enemy[width][height];
+	double score_ally[width][height];
 
 	// Utilities
 	inline Cell& get_cell(const Position& position) { return cells[position.y][position.x]; }
@@ -342,6 +343,7 @@ public:
 	inline int get_cells_used_objective(const Position& position) { return cells_used_objective[position.y][position.x]; }
 	inline char get_cell_info(const Position& position) { return cells_info[position.y][position.x]; }
 	inline double get_score_enemy(const Position& position) { return score_enemy[position.y][position.x]; }
+	inline double get_score_ally(const Position& position) { return score_ally[position.y][position.x]; }
 	inline vector<Position>& get_adjacency_list(const Position& position) { return adjacency_list.at(position); }
 	inline vector<Position>& get_adjacency_list_position_enemy(const Position& position) { return adjacency_list_position_enemy.at(position); }
 
@@ -419,6 +421,14 @@ public:
 				n++;
 		return n;
 	}
+	inline int nbr_towers_ally()
+	{
+		int n = 0;
+		for (auto& building : buildings_ally)
+			if (building->owner == 0 && building->t == BuildingType::TOWER)
+				n++;
+		return n;
+	}
 	inline shared_ptr<Building> getHQ()
 	{
 		for (auto& b : buildings)
@@ -468,7 +478,27 @@ public:
 		units.push_back(unit);
 		update_gamestate();
 	}
+	inline void refresh_gamestate_for_building(shared_ptr<Building> building)
+	{
+		income_ally += 4 * (building->t == BuildingType::MINE);
+		gold_ally -= tower_cost * (building->t == BuildingType::TOWER);
+		buildings.push_back(building);
+		update_gamestate();
+	}
 	inline int get_distance(const Position& pos1, const Position& pos2) { return distances[pos1.x + height * pos1.y][pos2.x + height * pos2.y]; }
+	inline vector<Position> get_frontier_ally(int distance)
+	{
+		vector<Position> frontier;
+		for (auto& position_ally : positions_ally)
+		for (auto& position_enemy : positions_enemy)
+			if (get_distance(position_ally, position_enemy) <= distance)
+			{
+				frontier.push_back(position_ally);
+				break;
+			}
+		return frontier;
+	}
+
 
 	// Main functions
 	void debug()
@@ -510,7 +540,7 @@ public:
 		//} 
 
 		cerr << "Level" << endl;
-		for (auto& row : cells_level_enemy)
+		for (auto& row : cells_level_ally)
 		{
 			for (auto& cell : row)
 				cerr << cell;
@@ -844,14 +874,23 @@ public:
 			adjacency_list_position_ally[position] = positions;
 		}
 
-		score_enemy= vector<vector<double>>(width, vector<double>(height, 0.0));
+
+		// Scores
+		for (int i = 0; i < width; i++)
+			for (int j = 0; j < height; j++)
+				score_ally[j][i] = score_enemy[j][i] = 0;
+
 		for (auto& enemy : units_enemy)
-		{
 			for (int i = 0; i < width; i++)
 				for (int j = 0; j < height; j++)
 					if (get_distance(enemy->p, Position(i, j)) <= 3)
 						score_enemy[j][i] += enemy->level;
-		}
+
+		for (auto& ally : units_ally)
+			for (int i = 0; i < width; i++)
+				for (int j = 0; j < height; j++)
+					if (get_distance(ally->p, Position(i, j)) <= 3)
+						score_ally[j][i] += ally->level;
 	}
 	void send_commands()
 	{
@@ -895,7 +934,7 @@ public:
 			position_for_mines.erase(position_for_mine);
 		}
 	}
-	void build_towers()
+	void build_towers_emergency()
 	{
 		Position pos;
 
@@ -905,13 +944,104 @@ public:
 			pos = Position(10, 10);
 
 		for (auto& enemy : units_enemy)
-			if (get_distance(enemy->p, hq_ally->p) <= 10)
+			if (get_distance(enemy->p, hq_ally->p) <= 5)
 			{
 				commands.push_back(Command(BUILD, "TOWER", pos));
 				return;
 			}
 	}
+	void build_towers()
+	{
+		Stopwatch s("Towers");
 
+		int n = nbr_towers_ally();
+
+		if (n >= 2)
+			return;
+
+		MaxPriorityQueue<Position, double> cuts = find_cuts(false);
+		double cuts_close[width][height] = {};
+		while (!cuts.empty())
+		{
+			Position cut = cuts.elements.top().second;
+			double gain = cuts.elements.top().first;
+
+			cerr << "My Cut: " << cut.print() << ", gain " << gain << endl;
+
+			for (int i = 0; i < width; i++)
+				for (int j = 0; j < height; j++)
+					if (get_distance(Position(i, j), cut) <= 1 && get_cell_info(Position(i, j)) == 'O')
+						cuts_close[j][i] += gain;
+
+			cuts.elements.pop();
+		}
+
+		double scores[width][height] = {};
+		for (int i = 0; i < width; i++)
+		for (int j = 0; j < height; j++)
+		{
+			Position position = Position(i, j);
+
+			if (get_cell_info(position) == 'O' && !get_cell(position).is_occupied() && !get_cell(position).get_mine())
+			{
+				double score = 0.0;
+
+				Position north_position = position.north_position();
+				if (get_cell_info(north_position) == 'O' && !get_cell(north_position).void_cell && north_position != position && get_cell(north_position).is_occupied_by_ally_unit())
+					score += max(3.0 - get_cell(north_position).level_of_ally_unit(), 0.0) * (get_score_enemy(north_position) - get_score_ally(north_position));
+
+				Position south_position = position.south_position();
+				if (get_cell_info(south_position) == 'O' && !get_cell(south_position).void_cell && south_position != position && get_cell(south_position).is_occupied_by_ally_unit())
+					score += max(3.0 - get_cell(south_position).level_of_ally_unit(), 0.0) * (get_score_enemy(south_position) - get_score_ally(south_position));
+
+				Position east_position = position.east_position();
+				if (get_cell_info(east_position) == 'O' && !get_cell(east_position).void_cell && east_position != position && get_cell(east_position).is_occupied_by_ally_unit())
+					score += max(3.0 - get_cell(east_position).level_of_ally_unit(), 0.0) * (get_score_enemy(east_position) - get_score_ally(east_position));
+
+				Position west_position = position.west_position();
+				if (get_cell_info(west_position) == 'O' && !get_cell(west_position).void_cell && west_position != position && get_cell(west_position).is_occupied_by_ally_unit())
+					score += max(3.0 - get_cell(west_position).level_of_ally_unit(), 0.0) * (get_score_enemy(west_position) - get_score_ally(west_position));
+
+				score += cuts_close[j][i];
+
+				// assume we are on the offensive then, no need for towers
+				if (get_distance(position, hq_ally->p) >= 12)
+					score = 0.0;
+
+				scores[j][i] = score;
+			}
+			else
+				scores[j][i] = -DBL_MAX;
+		}
+
+		//cerr << "Cuts map:" << endl;
+		//for (auto& row : scores)
+		//{
+		//	for (auto& cell : row)
+		//		cerr << ((cell == -DBL_MAX)? "#" : to_string(cell)) << " ";
+
+		//	cerr << endl;
+		//}
+
+		Position max_position = hq_ally->p;
+		double max_score = -DBL_MAX;
+
+		for (int i = 0; i < width; i++)
+		for (int j = 0; j < height; j++)
+			if (scores[j][i] > max_score)
+			{
+				max_score = scores[j][i];
+				max_position = Position(i, j);
+			}
+
+		cerr << "Best tower cell: " << max_position.print() << " score: " << max_score << endl;
+
+		if (gold_ally >= tower_cost && max_score >= tower_cost)
+		{
+			commands.push_back(Command(BUILD, "TOWER", max_position));
+			refresh_gamestate_for_building(make_shared<Building>(Building(max_position.x, max_position.y, TOWER, 0)));
+		}
+	}
 
 	// Training new units
 	double get_training_score(const shared_ptr<Unit>& unit, const Position& pos)
@@ -1165,17 +1295,21 @@ public:
 			bool enemy_on_cell = get_cell(pos).is_occupied_by_enemy_unit();
 			bool enemy_building_on_cell = get_cell(pos).is_occupied_by_enemy_building();
 			bool enemy_territory = get_cell_info(pos) == 'X';
+			bool enemy_territory_inactive = get_cell_info(pos) == 'x';
 			bool empty_at_distance_one = get_cell_info(pos) == '.' && distance == 1;
 
 			double score = 0.0;
 
-			//score += distance_to_hq_ally * (distance_to_hq_ally <= 3) * 100.0;
-			score -= distance_to_enemy_hq/* * (distance_to_enemy_hq <= 6)*/;
+			// add hockey stick with weight on closest
+			// more weight if going into cluster of allies or where less weight?
+
+			score -= distance_to_enemy_hq;
 			score += empty_at_distance_one * 10.0;
 			score += (hq_enemy->p == pos) * 10.0;
-			score += enemy_on_cell * 10.0;
-			score += enemy_building_on_cell * 10.0;
-			score += enemy_territory * 5.0;
+			score += enemy_on_cell * ((distance == 1) ? 20.0 : 15.0);
+			score += enemy_building_on_cell * ((distance == 1) ? 15.0 : 10.0);
+			score += enemy_territory * 7.5;
+			score += enemy_territory_inactive * 5.0;
 			score -= distance;
 
 			return score;
@@ -1498,6 +1632,8 @@ public:
 
 			for (auto& t : chainkill_path)
 				commands.push_back(Command(TRAIN, get_cells_level_ally(t), t));
+
+			cerr << "WILL CHAINKILL!" << endl;
 		}
 	}
 	unordered_map<Position, double, HashPosition> dijkstra_chainkill_all_costs(const Position& source, bool debug)
@@ -1616,13 +1752,13 @@ int main()
 			g.move_units();
 			g.attempt_chainkill();
 
+			g.build_towers_emergency();
+			g.build_towers();
+
 			g.train_units_on_cuts();
 			g.train_units();
 
 			g.debug();
-
-			//g.build_mines();
-			g.build_towers();
 
 			g.send_commands();
 		}
