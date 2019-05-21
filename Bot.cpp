@@ -916,9 +916,11 @@ public:
 		{
 			Stopwatch s("Train units of level" + to_string(level));
 
-			while (need_train_units(level) && can_train_level(level))
+			unordered_map<Position, double, HashPosition> training_positions = find_training_positions(level);
+
+			while (need_train_units(level) && can_train_level(level) && training_positions.size())
 			{
-				Position training_position = find_max_in_map(find_training_positions(level))->first;
+				Position training_position = find_max_in_map(training_positions)->first;
 				refresh_gamestate_for_spawn(make_shared<Unit>(Unit(training_position.x, training_position.y, 999, level, 0)), training_position);
 				commands.push_back(Command(TRAIN, level, training_position));
 			}
