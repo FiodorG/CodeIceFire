@@ -894,8 +894,6 @@ public:
 	}
 	void send_commands()
 	{
-		Stopwatch s("Send commands");
-
 		for_each(commands.begin(), commands.end(), [](Command &c) { c.print(); });
 		cout << "WAIT" << endl;
 	}
@@ -1628,7 +1626,8 @@ public:
 			for (auto& t : chainkill_path)
 				score += get_cells_level_ally(t) * 10.0;
 
-			assert(score == chainkill_cost);
+			if (score >= gold_ally)
+				return;
 
 			for (auto& t : chainkill_path)
 				commands.push_back(Command(TRAIN, get_cells_level_ally(t), t));
