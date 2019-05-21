@@ -24,7 +24,6 @@ const int tower_cost = 15;
 const int level_1_cost = 10;
 const int level_2_cost = 20;
 const int level_3_cost = 30;
-
 const int level_1_upkeep = 1;
 const int level_2_upkeep = 4;
 const int level_3_upkeep = 20;
@@ -153,13 +152,13 @@ public:
 	bool operator==(const Position& rhs) { return x == rhs.x && y == rhs.y; } const
 	bool operator!=(const Position& rhs) { return x != rhs.x || y != rhs.y; } const
 
-	static int distance(const Position& lhs, const Position& rhs) { return abs(lhs.x - rhs.x) + abs(lhs.y - rhs.y); }
-	Position north_position() { return (this->y > 0)? Position(this->x, this->y - 1) : Position(*this); }
-	Position south_position() { return (this->y < height - 1)? Position(this->x, this->y + 1) : Position(*this); }
-	Position east_position() { return (this->x < width - 1) ? Position(this->x + 1, this->y) : Position(*this); }
-	Position west_position() { return (this->x > 0) ? Position(this->x - 1, this->y) : Position(*this); }
-	void debug() { cerr << "(" << x << "," << y << ")" << endl; }
-	string print() const { return "(" + to_string(x) + "," + to_string(y) + ")"; }
+	inline static int distance(const Position& lhs, const Position& rhs) { return abs(lhs.x - rhs.x) + abs(lhs.y - rhs.y); }
+	inline Position north_position() { return (this->y > 0)? Position(this->x, this->y - 1) : Position(*this); }
+	inline Position south_position() { return (this->y < height - 1)? Position(this->x, this->y + 1) : Position(*this); }
+	inline Position east_position() { return (this->x < width - 1) ? Position(this->x + 1, this->y) : Position(*this); }
+	inline Position west_position() { return (this->x > 0) ? Position(this->x - 1, this->y) : Position(*this); }
+	inline void debug() { cerr << "(" << x << "," << y << ")" << endl; }
+	inline string print() const { return "(" + to_string(x) + "," + to_string(y) + ")"; }
 };
 
 bool operator==(const Position& lhs, const Position& rhs) { return lhs.x == rhs.x && lhs.y == rhs.y; }
@@ -216,17 +215,15 @@ public:
 
 	Unit(int x, int y, int id, int level, int owner) : p(x, y), id(id), level(level), owner(owner), objective(Objective(-DBL_MAX)) {}
 
-	void debug() 
+	inline void debug() 
 	{
 		cerr << "id" << id << ", lvl" << level << " on (" << p.x << "," << p.y << ") owned by " << owner << ", obj: " << " (" << objective.target.x << "," << objective.target.y << ") " << "score: " << objective.score << endl;
 	}
-
-	bool isOwned() 
+	inline bool isOwned()
 	{
 		return owner == 0;
 	}
-
-	void set_objective(Objective obj) { this->objective = obj; }
+	inline void set_objective(Objective obj) { this->objective = obj; }
 };
 
 class Building 
@@ -240,12 +237,12 @@ public:
 	Building(int x, int y, int t, int owner) : p(x, y), t(static_cast<BuildingType>(t)), owner(owner) {}
 	Building(const Building& building) : p(building.p.x, building.p.y), t(building.t), owner(building.owner) {}
 
-	void debug() { cerr << t << " at " << p.x << " " << p.y << " owned by " << owner << endl; }
-	bool isHQ() 
+	inline void debug() { cerr << t << " at " << p.x << " " << p.y << " owned by " << owner << endl; }
+	inline bool isHQ()
 	{
 		return t == HQ;
 	}
-	bool isOwned() 
+	inline bool isOwned()
 	{
 		return owner == 0;
 	}
@@ -264,29 +261,29 @@ public:
 	Cell() : owner(0), mine(false), void_cell(false) {}
 	Cell(int x, int y) : owner(0), mine(false), void_cell(false) { this->position = Position(x, y); }
 
-	void set_unit(Unit unit) { this->unit = make_shared<Unit>(unit); }
-	void set_building(Building building) { this->building = make_shared<Building>(building); }
-	void set_owner(int owner) { this->owner = owner; }
-	void set_mine() { this->mine = true; }
-	void set_void_cell() { this->void_cell = true; }
-	bool is_empty() { return !unit && !building; }
-	bool is_occupied() { return unit || building; }
-	bool is_occupied_by_unit() { return unit? true : false; }
-	bool is_occupied_by_building() { return building? true : false; }
-	bool is_occupied_by_enemy_building() { return is_occupied_by_building() && building->owner == 1; }
-	bool is_occupied_by_inacessible_building() { return is_occupied_by_building() && building->owner == 0 && (building->t == BuildingType::HQ || building->t == BuildingType::MINE); }
-	bool is_occupied_by_enemy_tower() { return is_occupied_by_building() && building->owner == 1 && building->t == BuildingType::TOWER; }
-	bool is_occupied_by_enemy_hq() { return is_occupied_by_building() && building->owner == 1 && building->t == BuildingType::HQ; }
-	bool is_occupied_by_enemy_mine() { return is_occupied_by_building() && building->owner == 1 && building->t == BuildingType::MINE; }
-	bool is_occupied_by_ally_mine() { return is_occupied_by_building() && building->owner == 0 && building->t == BuildingType::MINE; }
-	bool is_occupied_by_ally_tower() { return is_occupied_by_building() && building->owner == 0 && building->t == BuildingType::TOWER; }
-	bool is_occupied_by_mine() { return is_occupied_by_building() && building->t == BuildingType::MINE; }
-	bool is_occupied_by_hq() { return is_occupied_by_building() && building->t == BuildingType::HQ; }
-	bool is_occupied_by_tower() { return is_occupied_by_building() && building->t == BuildingType::TOWER; }
-	bool is_occupied_by_enemy_unit() { return is_occupied_by_unit() && unit->owner == 1; }
-	bool is_occupied_by_enemy_unit_of_level(int level) { return is_occupied_by_unit() && unit->owner == 1 && unit->level == level; }
-	bool is_occupied_by_ally_unit() { return is_occupied_by_unit() && unit->owner == 0; }
-	int level_of_enemy_unit() { return is_occupied_by_enemy_unit()? unit->level : -1; }
+	inline void set_unit(shared_ptr<Unit> unit) { this->unit = unit; }
+	inline void set_building(shared_ptr<Building> building) { this->building = building; }
+	inline void set_owner(int owner) { this->owner = owner; }
+	inline void set_mine() { this->mine = true; }
+	inline void set_void_cell() { this->void_cell = true; }
+	inline bool is_empty() { return !unit && !building; }
+	inline bool is_occupied() { return unit || building; }
+	inline bool is_occupied_by_unit() { return unit? true : false; }
+	inline bool is_occupied_by_building() { return building? true : false; }
+	inline bool is_occupied_by_enemy_building() { return is_occupied_by_building() && building->owner == 1; }
+	inline bool is_occupied_by_inacessible_building() { return is_occupied_by_building() && building->owner == 0 && (building->t == BuildingType::HQ || building->t == BuildingType::MINE); }
+	inline bool is_occupied_by_enemy_tower() { return is_occupied_by_building() && building->owner == 1 && building->t == BuildingType::TOWER; }
+	inline bool is_occupied_by_enemy_hq() { return is_occupied_by_building() && building->owner == 1 && building->t == BuildingType::HQ; }
+	inline bool is_occupied_by_enemy_mine() { return is_occupied_by_building() && building->owner == 1 && building->t == BuildingType::MINE; }
+	inline bool is_occupied_by_ally_mine() { return is_occupied_by_building() && building->owner == 0 && building->t == BuildingType::MINE; }
+	inline bool is_occupied_by_ally_tower() { return is_occupied_by_building() && building->owner == 0 && building->t == BuildingType::TOWER; }
+	inline bool is_occupied_by_mine() { return is_occupied_by_building() && building->t == BuildingType::MINE; }
+	inline bool is_occupied_by_hq() { return is_occupied_by_building() && building->t == BuildingType::HQ; }
+	inline bool is_occupied_by_tower() { return is_occupied_by_building() && building->t == BuildingType::TOWER; }
+	inline bool is_occupied_by_enemy_unit() { return is_occupied_by_unit() && unit->owner == 1; }
+	inline bool is_occupied_by_enemy_unit_of_level(int level) { return is_occupied_by_unit() && unit->owner == 1 && unit->level == level; }
+	inline bool is_occupied_by_ally_unit() { return is_occupied_by_unit() && unit->owner == 0; }
+	inline int level_of_enemy_unit() { return is_occupied_by_enemy_unit()? unit->level : -1; }
 };
 
 class Game
@@ -294,8 +291,8 @@ class Game
 public:
 	int turn;
 
-	vector<Unit> units;
-	vector<Building> buildings;
+	vector<shared_ptr<Unit>> units;
+	vector<shared_ptr<Building>> buildings;
 	vector<Position> mine_spots;
 	vector<Command> commands;
 
@@ -329,19 +326,19 @@ public:
 	vector<vector<double>> score_enemy;
 
 	// Utilities
-	Cell& get_cell(const Position& position) { return cells[position.y][position.x]; }
-	int get_cells_used_movement(const Position& position) { return cells_used_movement[position.y][position.x]; }
-	int get_cells_level(const Position& position) { return cells_level[position.y][position.x]; }
-	int get_cells_used_objective(const Position& position) { return cells_used_objective[position.y][position.x]; }
-	char get_cell_info(const Position& position) { return cells_info[position.y][position.x]; }
-	double get_score_enemy(const Position& position) { return score_enemy[position.y][position.x]; }
-	vector<Position>& get_adjacency_list(const Position& position) { return adjacency_list.at(position); }
-	vector<Position>& get_adjacency_list_position_enemy(const Position& position) { return adjacency_list_position_enemy.at(position); }
+	inline Cell& get_cell(const Position& position) { return cells[position.y][position.x]; }
+	inline int get_cells_used_movement(const Position& position) { return cells_used_movement[position.y][position.x]; }
+	inline int get_cells_level(const Position& position) { return cells_level[position.y][position.x]; }
+	inline int get_cells_used_objective(const Position& position) { return cells_used_objective[position.y][position.x]; }
+	inline char get_cell_info(const Position& position) { return cells_info[position.y][position.x]; }
+	inline double get_score_enemy(const Position& position) { return score_enemy[position.y][position.x]; }
+	inline vector<Position>& get_adjacency_list(const Position& position) { return adjacency_list.at(position); }
+	inline vector<Position>& get_adjacency_list_position_enemy(const Position& position) { return adjacency_list_position_enemy.at(position); }
 
-	bool can_train_level3() { return gold_ally >= 30 && income_ally >= 20; }
-	bool can_train_level2() { return gold_ally >= 20 && income_ally >= 4; }
-	bool can_train_level1() { return gold_ally >= 10 && income_ally >= 1; }
-	bool can_train_level(int level) 
+	inline bool can_train_level3() { return gold_ally >= 30 && income_ally >= 20; }
+	inline bool can_train_level2() { return gold_ally >= 20 && income_ally >= 4; }
+	inline bool can_train_level1() { return gold_ally >= 10 && income_ally >= 1; }
+	inline bool can_train_level(int level)
 	{
 		switch (level)
 		{
@@ -359,7 +356,7 @@ public:
 			break;
 		}
 	}
-	int cost_of_unit(int level)
+	inline int cost_of_unit(int level)
 	{
 		switch (level)
 		{
@@ -377,7 +374,7 @@ public:
 			break;
 		}
 	}
-	int upkeep_of_unit(int level)
+	inline int upkeep_of_unit(int level)
 	{
 		switch (level)
 		{
@@ -395,7 +392,7 @@ public:
 			break;
 		}
 	}
-	int nbr_units_ally_of_level(int level)
+	inline int nbr_units_ally_of_level(int level)
 	{
 		int n = 0;
 		for (auto& unit : units_ally)
@@ -404,7 +401,7 @@ public:
 
 		return n;
 	}
-	int nbr_mines_ally()
+	inline int nbr_mines_ally()
 	{
 		int n = 0;
 		for (auto& building : buildings_ally)
@@ -412,19 +409,19 @@ public:
 				n++;
 		return n;
 	}
-	const Building& getHQ()
+	inline shared_ptr<Building> getHQ()
 	{
 		for (auto& b : buildings)
-			if (b.isHQ() && b.isOwned())
+			if (b->isHQ() && b->isOwned())
 				return b;
 	}
-	const Building& getOpponentHQ()
+	inline shared_ptr<Building> getOpponentHQ()
 	{
 		for (auto &b : buildings)
-			if (b.isHQ() && !b.isOwned())
+			if (b->isHQ() && !b->isOwned())
 				return b;
 	}
-	bool is_position_attainable(const Position& position)
+	inline bool is_position_attainable(const Position& position)
 	{
 		if (get_cell_info(Position(position.x, position.y)) == 'O')
 			return true;
@@ -521,6 +518,8 @@ public:
 	{
 		Stopwatch s("Update game");
 
+		turn++;
+
 		units.clear();
 		buildings.clear();
 		commands.clear();
@@ -550,7 +549,7 @@ public:
 			int x;
 			int y;
 			cin >> owner >> buildingType >> x >> y; cin.ignore();
-			buildings.push_back(Building(x, y, buildingType, owner));
+			buildings.push_back(make_shared<Building>(Building(x, y, buildingType, owner)));
 		}
 		
 		int unitCount;
@@ -563,23 +562,21 @@ public:
 			int x;
 			int y;
 			cin >> owner >> unitId >> level >> x >> y; cin.ignore();
-			units.push_back(Unit(x, y, unitId, level, owner));
+			units.push_back(make_shared<Unit>(Unit(x, y, unitId, level, owner)));
 		}
 
-		hq_ally = make_shared<Building>(getHQ());
-		hq_enemy = make_shared<Building>(getOpponentHQ());
+		hq_ally = getHQ();
+		hq_enemy = getOpponentHQ();
 	}
 	void update_gamestate()
 	{
-		Stopwatch s("Update gamestate");
-
-		turn++;
+		//Stopwatch s("Update gamestate");
 
 		// Cells used from previous units
 		cells_used_objective = vector<vector<int>>(width, vector<int>(height, 0));
 		cells_used_movement = vector<vector<int>>(width, vector<int>(height, 0));
 
-		cells.clear(); // does this clear the two level cells with all shared_ptr well?
+		cells.clear();
 		cells = vector<vector<Cell>>(width, vector<Cell>(height));
 
 		for (int i = 0; i < width; i++)
@@ -590,28 +587,28 @@ public:
 		units_ally.clear();
 		units_enemy.clear();
 
-		for (Unit& unit : units)
+		for (auto& unit : units)
 		{
-			if (unit.isOwned())
-				units_ally.push_back(make_shared<Unit>(unit));
+			if (unit->isOwned())
+				units_ally.push_back(unit);
 			else
-				units_enemy.push_back(make_shared<Unit>(unit));
+				units_enemy.push_back(unit);
 
-			cells[unit.p.y][unit.p.x].set_unit(unit);
+			cells[unit->p.y][unit->p.x].set_unit(unit);
 		}
 		
 		// Buildings
 		buildings_ally.clear();
 		buildings_enemy.clear();
 
-		for (Building& building : buildings)
+		for (auto& building : buildings)
 		{
-			if (building.isOwned())
-				buildings_ally.push_back(make_shared<Building>(building));
+			if (building->isOwned())
+				buildings_ally.push_back(building);
 			else
-				buildings_enemy.push_back(make_shared<Building>(building));
+				buildings_enemy.push_back(building);
 
-			cells[building.p.y][building.p.x].set_building(building);
+			cells[building->p.y][building->p.x].set_building(building);
 		}
 
 		// Mines
@@ -647,24 +644,24 @@ public:
 					cells_level[cell.position.y][cell.position.x] = 1;
 			}
 
-			for (auto& row : cells)
-			for (auto& cell : row)
-				if (cell.is_occupied_by_enemy_tower())
-				{
-					cells_level[cell.position.y][cell.position.x] = 3;
+		for (auto& row : cells)
+		for (auto& cell : row)
+			if (cell.is_occupied_by_enemy_tower())
+			{
+				cells_level[cell.position.y][cell.position.x] = 3;
 
-					if (get_cell_info(Position(cell.position.x, min(cell.position.y + 1, width - 1))) == 'X')
-						cells_level[min(cell.position.y + 1, width - 1)][cell.position.x] = 3;
+				if (get_cell_info(Position(cell.position.x, min(cell.position.y + 1, width - 1))) == 'X')
+					cells_level[min(cell.position.y + 1, width - 1)][cell.position.x] = 3;
 
-					if (get_cell_info(Position(cell.position.x, max(cell.position.y - 1, 0))) == 'X')
-						cells_level[max(cell.position.y - 1, 0)][cell.position.x] = 3;
+				if (get_cell_info(Position(cell.position.x, max(cell.position.y - 1, 0))) == 'X')
+					cells_level[max(cell.position.y - 1, 0)][cell.position.x] = 3;
 
-					if (get_cell_info(Position(min(cell.position.x + 1, height - 1), cell.position.y)) == 'X')
-						cells_level[cell.position.y][min(cell.position.x + 1, height - 1)] = 3;
+				if (get_cell_info(Position(min(cell.position.x + 1, height - 1), cell.position.y)) == 'X')
+					cells_level[cell.position.y][min(cell.position.x + 1, height - 1)] = 3;
 
-					if (get_cell_info(Position(max(cell.position.x - 1, 0), cell.position.y)) == 'X')
-						cells_level[cell.position.y][max(cell.position.x - 1, 0)] = 3;
-				}
+				if (get_cell_info(Position(max(cell.position.x - 1, 0), cell.position.y)) == 'X')
+					cells_level[cell.position.y][max(cell.position.x - 1, 0)] = 3;
+			}
 
 		// Adjacency list
 		adjacency_list.clear();
@@ -777,7 +774,7 @@ public:
 
 		int nbr_mines = nbr_mines_ally();
 
-		if (nbr_mines >= 3)
+		if (nbr_mines >= 2)
 			return;
 
 		unordered_map<Position, double, HashPosition> position_for_mines;
@@ -835,16 +832,14 @@ public:
 			bool enemy_on_cell = get_cell(pos).is_occupied_by_enemy_unit();
 			bool enemy_building_on_cell = get_cell(pos).is_occupied_by_enemy_building();
 			bool enemy_territory = get_cell_info(pos) == 'X';
-			bool is_enemy_hq = (hq_enemy->p == pos);
 
 			double score = 0.0;
 
 			score += (turn <= 3) ? -distance_to_hq_ally * 10.0 : distance_to_hq_ally;
 			score -= distance_to_enemy_hq;
-			score += is_enemy_hq * 10.0;
 			score += enemy_on_cell * 20.0;
 			score += enemy_building_on_cell * 20.0;
-			score += enemy_territory * 5.0;
+			score += enemy_territory * 10.0;
 
 			return score;
 		}
@@ -1004,15 +999,33 @@ public:
 	{
 		Stopwatch s("Generate Moves");
 
+		assign_objective_to_units();
+
 		for (auto& unit : units_in_order)
 		{
-			cerr << "Finding path for: " << unit->id << ", ";
-			Position target = unit->objective.target;
-			Position destination = get_path(unit, target, false);
-			cells_used_movement[destination.y][destination.x] = 1;
-			cerr << "moving to " << destination.print() << endl;
-			commands.push_back(Command(MOVE, unit->id, destination));
+			Position destination = get_path(unit, unit->objective.target, false);
+			cerr << "Path for: " << unit->id << ", moving to " << destination.print() << endl;
+
+			if (unit_can_move_to_destination(unit, destination))
+			{
+				cells_used_movement[destination.y][destination.x] = 1;
+				commands.push_back(Command(MOVE, unit->id, destination));
+
+				cells_info[destination.y][destination.x] = 'O';
+				unit->p = destination;
+
+				update_gamestate();
+			}
 		}
+	}
+	bool unit_can_move_to_destination(const shared_ptr<Unit>& unit, const Position& target)
+	{
+		return (
+			get_cells_level(target) <= unit->level &&
+			Position::distance(target, unit->p) <= 1 &&
+			!get_cell(target).is_occupied_by_inacessible_building() &&
+			!get_cell(target).is_occupied_by_ally_unit()
+			);
 	}
 	Position get_path(const shared_ptr<Unit>& unit, Position target, bool debug)
 	{
@@ -1031,7 +1044,10 @@ public:
 		double score = 1.0;
 
 		// Too low level to move to position
-		if (unit->level < get_cells_level(next))
+		//if (unit->level < get_cells_level(next))
+		//	score += 1000.0;
+
+		if (get_cell_info(next) == '#')
 			score += 1000.0;
 
 		// Someone already moving there
@@ -1139,11 +1155,13 @@ public:
 			bool enemy_on_cell = get_cell(pos).is_occupied_by_enemy_unit();
 			bool enemy_building_on_cell = get_cell(pos).is_occupied_by_enemy_building();
 			bool enemy_territory = get_cell_info(pos) == 'X';
+			bool empty_at_distance_one = get_cell_info(pos) == '.' && distance == 1;
 
 			double score = 0.0;
 
-			score += distance_to_hq_ally * (distance_to_hq_ally <= 3) * 100.0;
-			score -= distance_to_enemy_hq * (distance_to_enemy_hq <= 6);
+			//score += distance_to_hq_ally * (distance_to_hq_ally <= 3) * 100.0;
+			score -= distance_to_enemy_hq/* * (distance_to_enemy_hq <= 6)*/;
+			score += empty_at_distance_one * 10.0;
 			score += (hq_enemy->p == pos) * 10.0;
 			score += enemy_on_cell * 10.0;
 			score += enemy_building_on_cell * 10.0;
@@ -1539,22 +1557,26 @@ int main()
 	while (true)
 	{
 		g.update_game();
-		g.update_gamestate();
+		{
+			Stopwatch s("Turn total time");
 
-		g.attempt_chainkill();
-		g.assign_objective_to_units();
-		g.generate_moves();
+			g.update_gamestate();
 
-		g.train_units_on_cuts();
-		g.train_units_level_2();
-		g.train_units_level_1();
+			g.attempt_chainkill();
 
-		g.debug();
+			g.generate_moves();
 
-		g.build_mines();
-		g.build_towers();
+			g.train_units_on_cuts();
+			g.train_units_level_2();
+			g.train_units_level_1();
 
-		g.send_commands();
+			g.debug();
+
+			g.build_mines();
+			g.build_towers();
+
+			g.send_commands();
+		}
 	}
 
 	return 0;
