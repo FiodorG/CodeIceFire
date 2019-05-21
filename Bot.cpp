@@ -9,9 +9,11 @@
 #include <queue>
 #include <functional>
 #include <utility>
+#include <array>
 #include <memory>
 #include <queue>
 #include <chrono>
+#include <climits>
 #include <float.h>
 #include <assert.h>
 #include <cctype>
@@ -311,6 +313,9 @@ public:
 	vector<Position> positions_ally;
 	vector<Position> positions_enemy;
 
+	//array<array<int, width * height>, width * height> distances;
+	int distances[width * height][width * height];
+
 	unordered_map<Position, vector<Position>, HashPosition> adjacency_list;
 	unordered_map<Position, vector<Position>, HashPosition> adjacency_list_position_enemy;
 	unordered_map<Position, vector<Position>, HashPosition> adjacency_list_position_ally;
@@ -459,6 +464,7 @@ public:
 		units.push_back(unit);
 		update_gamestate();
 	}
+	inline int get_distance(const Position& pos1, const Position& pos2) { return distances[pos1.x + height * pos1.y][pos2.x + height * pos2.y]; }
 
 	// Main functions
 	void debug()
@@ -516,6 +522,11 @@ public:
 
 		//	cerr << endl;
 		//}
+
+		// seed = -6736300506288822300
+		//cerr << get_distance(Position(5, 5), Position(6, 6)) << " vs " << Position::distance(Position(5, 5), Position(6, 6)) << endl;
+
+		//cerr << "nbr: " << nbr_units_ally_of_level(1) << endl;
 	}
 	void init() 
 	{
@@ -586,6 +597,9 @@ public:
 
 		hq_ally = getHQ();
 		hq_enemy = getOpponentHQ();
+
+		if (turn == 1)
+			floyd_warshall();
 	}
 	void update_gamestate()
 	{
@@ -773,7 +787,7 @@ public:
 		{
 			for (int i = 0; i < width; i++)
 				for (int j = 0; j < height; j++)
-					if (Position::distance(enemy->p, Position(i, j)) <= 3)
+					if (get_distance(enemy->p, Position(i, j)) <= 3)
 						score_enemy[j][i] += enemy->level;
 		}
 	}
@@ -800,7 +814,7 @@ public:
 		for (int i = 0; i < width; i++)
 			for (int j = 0; j < height; j++)
 				if (cells_info[j][i] == 'O' && cells[j][i].mine && !cells[j][i].is_occupied_by_building())
-					position_for_mines[Position(i, j)] = -Position::distance(hq_ally->p, Position(i, j));
+					position_for_mines[Position(i, j)] = -get_distance(hq_ally->p, Position(i, j));
 
 		while (position_for_mines.size())
 		{
@@ -829,7 +843,7 @@ public:
 			pos = Position(10, 10);
 
 		for (auto& enemy : units_enemy)
-			if (Position::distance(enemy->p, hq_ally->p) <= 10)
+			if (get_distance(enemy->p, hq_ally->p) <= 10)
 			{
 				commands.push_back(Command(BUILD, "TOWER", pos));
 				return;
@@ -845,8 +859,8 @@ public:
 			return -DBL_MAX;
 		else
 		{
-			int distance_to_hq_ally = Position::distance(pos, hq_ally->p);
-			int distance_to_enemy_hq = Position::distance(pos, hq_enemy->p);
+			int distance_to_hq_ally = get_distance(pos, hq_ally->p);
+			int distance_to_enemy_hq = get_distance(pos, hq_enemy->p);
 
 			bool enemy_on_cell = get_cell(pos).is_occupied_by_enemy_unit();
 			bool enemy_building_on_cell = get_cell(pos).is_occupied_by_enemy_building();
@@ -884,7 +898,7 @@ public:
 				bool attainable = false;
 				for (int k = 0; k < width; k++)
 					for (int l = 0; l < height; l++)
-						if (Position::distance(pos, Position(k, l)) == 1 && get_cell_info(Position(k, l)) == 'O')
+						if (get_distance(pos, Position(k, l)) == 1 && get_cell_info(Position(k, l)) == 'O')
 						{
 							attainable = true;
 							break;
@@ -909,7 +923,7 @@ public:
 
 		return positions_for_spawn;
 	}
-	inline bool need_train_units(int level) { return nbr_units_ally_of_level(level) <= (level == 1) ? 8 : 4; }
+	inline bool need_train_units(int level) { return nbr_units_ally_of_level(level) <= ((level == 1) ? 8 : 4); }
 	void train_units()
 	{
 		for (int level : {2, 1})
@@ -956,14 +970,14 @@ public:
 	{
 		return (
 			get_cells_level(target) <= unit->level &&
-			Position::distance(target, unit->p) <= 1 &&
+			get_distance(target, unit->p) <= 1 &&
 			!get_cell(target).is_occupied_by_inacessible_building() &&
 			!get_cell(target).is_occupied_by_ally_unit()
 			);
 	}
 	Position get_path(const shared_ptr<Unit>& unit, Position target, bool debug)
 	{
-		if (unit->p == target || (Position::distance(unit->p, target) == 1))
+		if (unit->p == target || (get_distance(unit->p, target) == 1))
 			return target;
 
 		vector<Position> optimal_path = dijkstra(unit, target, debug);
@@ -1082,9 +1096,9 @@ public:
 			return -DBL_MAX;
 		else
 		{
-			int distance_to_hq_ally = Position::distance(pos, hq_ally->p);
-			int distance_to_enemy_hq = Position::distance(pos, hq_enemy->p);
-			int distance = Position::distance(unit->p, pos);
+			int distance_to_hq_ally = get_distance(pos, hq_ally->p);
+			int distance_to_enemy_hq = get_distance(pos, hq_enemy->p);
+			int distance = get_distance(unit->p, pos);
 
 			bool enemy_on_cell = get_cell(pos).is_occupied_by_enemy_unit();
 			bool enemy_building_on_cell = get_cell(pos).is_occupied_by_enemy_building();
@@ -1227,7 +1241,7 @@ public:
 				score += 100.0;
 			
 			// if close to hq, should definitely do the cut
-			if (Position::distance(position, hq_ally->p) <= 3)
+			if (get_distance(position, hq_ally->p) <= 3)
 				score += 20.0;
 
 			score += 1.0;
@@ -1279,17 +1293,16 @@ public:
 			if (find_enemies)
 			{
 				for (auto& position : positions_ally)
-					if (Position::distance(articulation_point, position) <= 1)
+					if (get_distance(articulation_point, position) <= 1)
 					{
 						attainable_articulation_points.push_back(articulation_point);
 						break;
 					}
-					
 			}
 			else
 			{
 				for (auto& position : positions_enemy)
-					if (Position::distance(articulation_point, position) <= 1)
+					if (get_distance(articulation_point, position) <= 1)
 					{
 						attainable_articulation_points.push_back(articulation_point);
 						break;
@@ -1480,6 +1493,45 @@ public:
 		return reconstruct_path(source, target, came_from);
 	}
 
+
+	// Distances
+	void floyd_warshall()
+	{
+		Stopwatch s("All distance");
+
+		const int dim = width * height;
+
+		for (int i = 0; i < dim; i++)
+		for (int j = 0; j < dim; j++)
+		{
+			Position pos1 = Position(i % width, i / width);
+			Position pos2 = Position(j % width, j / width);
+
+			int distance = INT_MAX;
+			if (Position::distance(pos1, pos2) == 1 && get_cell_info(pos1) != '#' && get_cell_info(pos2) != '#')
+				distance = 1;
+			else if (Position::distance(pos1, pos2) == 0)
+				distance = 0;
+
+			distances[i][j] = distance;
+		}
+
+		for (int k = 0; k < dim; ++k)
+			for (int i = 0; i < dim; ++i)
+				for (int j = 0; j <= i; ++j)
+					if (distances[i][k] != INT_MAX && distances[k][j] != INT_MAX && distances[i][k] + distances[k][j] < distances[i][j])
+						distances[j][i] = distances[i][j] = distances[i][k] + distances[k][j];
+		
+		//cerr << "Distances" << endl;
+
+		//for (auto& row : distances)
+		//{
+		//	for (auto& cell : row)
+		//		cerr << ((cell < INT_MAX) ? to_string(cell) : "#") << " ";
+
+		//	cerr << endl;
+		//}
+	}
 };
 
 int main()
