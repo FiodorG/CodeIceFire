@@ -719,7 +719,6 @@ public:
 		// Units
 		units_ally.clear();
 		units_enemy.clear();
-
 		for (auto& unit : units)
 		{
 			if (unit->isOwned())
@@ -733,7 +732,6 @@ public:
 		// Buildings
 		buildings_ally.clear();
 		buildings_enemy.clear();
-
 		for (auto& building : buildings)
 		{
 			if (building->isOwned())
@@ -1195,6 +1193,7 @@ public:
 					Position training_position = find_max_in_map(training_positions)->first;
 					refresh_gamestate_for_spawn(make_shared<Unit>(Unit(training_position.x, training_position.y, 999, level, 0)), training_position);
 					commands.push_back(Command(TRAIN, level, training_position));
+					cerr << "Training level" << level << " on " << training_position.print() << endl;
 				}
 				else
 					break;
@@ -1368,11 +1367,22 @@ public:
 			score -= distance_to_enemy_hq;
 			score += empty_at_distance_one * 10.0;
 			score += (hq_enemy->p == pos) * 10.0;
-			score += enemy_on_cell * ((distance == 1) ? 20.0 : 15.0);
-			score += enemy_building_on_cell * ((distance == 1) ? 15.0 : 10.0);
-			score += enemy_territory * 7.5;
-			score += enemy_territory_inactive * 5.0;
-			score += at_equidistance_between_hq * 20.0;
+
+			if (false)
+			{
+				score += enemy_on_cell * 10.0;
+				score += enemy_building_on_cell * 10.0;
+				score += enemy_territory * 5.0;
+			}
+			else
+			{
+				score += enemy_on_cell * ((distance == 1) ? 20.0 : 15.0);
+				score += enemy_building_on_cell * ((distance == 1) ? 15.0 : 10.0);
+				score += enemy_territory * 7.5;
+				score += enemy_territory_inactive * 5.0;
+				//score += at_equidistance_between_hq * 20.0;
+			}
+
 			score -= distance;
 
 			return score;
@@ -2020,7 +2030,7 @@ int main()
 
 			g.move_units();
 			g.attempt_chainkill();
-			g.search_cuts();
+			//g.search_cuts();
 			
 			g.build_towers_emergency();
 			//g.build_towers();
