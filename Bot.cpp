@@ -1212,6 +1212,7 @@ public:
 		for (auto& unit : units_in_order)
 		{
 			Position destination = get_path(unit, unit->objective.target, false);
+			
 			cerr << "Path for: " << unit->id << ", want to move to " << destination.print() << endl;
 
 			if (unit_can_move_to_destination(unit, destination))
@@ -1356,7 +1357,7 @@ public:
 			bool enemy_building_on_cell = get_cell(pos).is_occupied_by_enemy_building();
 			bool enemy_territory = get_cell_info(pos) == 'X';
 			bool enemy_territory_inactive = get_cell_info(pos) == 'x';
-			bool empty_at_distance_one = get_cell_info(pos) == '.' && distance == 1;
+			bool close_empty = get_cell_info(pos) == '.' && distance <= 2;
 			bool at_equidistance_between_hq = abs(get_distance(pos, hq_ally->p) - get_distance(pos, hq_enemy->p)) <= 2;
 
 			double score = 0.0;
@@ -1365,13 +1366,16 @@ public:
 			// more weight if going into cluster of allies or where less weight?
 
 			score -= distance_to_enemy_hq;
-			score += empty_at_distance_one * 10.0;
-			score += (hq_enemy->p == pos) * 10.0;
+			score += close_empty * 10.0;
+			//score += empty * min(max(30.0 - 10.0 * distance, 0.0), 20.0);
+			//score += (hq_enemy->p == pos) * 10.0;
 
 			score += enemy_on_cell * ((distance == 1) ? 20.0 : 15.0);
 			score += enemy_building_on_cell * ((distance == 1) ? 15.0 : 10.0);
-			score += enemy_territory * 7.5;
-			score += enemy_territory_inactive * 5.0;
+			score += enemy_territory * ((distance == 1) ? 15.0 : 7.5);
+			//score += enemy_territory * 7.5;
+			//score += enemy_territory_inactive * 5.0;
+			score += enemy_territory_inactive * ((distance == 1) ? 10.0 : 5.0);
 			//score += at_equidistance_between_hq * 20.0;
 
 			score -= distance;
@@ -1500,12 +1504,6 @@ public:
 				score += 4.0;
 			else if (cell.is_occupied_by_tower())
 				score += 15.0;
-			//else if (cell.is_occupied_by_hq())
-			//	score += 100.0;
-			
-			// if close to hq, should definitely do the cut
-			//if (get_distance(position, hq) <= 3)
-			//	score += 20.0;
 
 			score += 1.0;
 		}
