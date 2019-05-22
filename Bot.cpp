@@ -335,6 +335,7 @@ public:
 
 	double score_enemy[width][height];
 	double score_ally[width][height];
+	double cuts_ally[width][height];
 
 	// Utilities
 	inline Cell& get_cell(const Position& position) { return cells[position.y][position.x]; }
@@ -343,6 +344,7 @@ public:
 	inline int get_cells_level_enemy(const Position& position) { return cells_level_enemy[position.y][position.x]; }
 	inline int get_cells_used_objective(const Position& position) { return cells_used_objective[position.y][position.x]; }
 	inline char get_cell_info(const Position& position) { return cells_info[position.y][position.x]; }
+	inline double get_cuts_ally(const Position& position) { return cuts_ally[position.y][position.x]; }
 	inline double get_score_enemy(const Position& position) { return score_enemy[position.y][position.x]; }
 	inline double get_score_ally(const Position& position) { return score_ally[position.y][position.x]; }
 	inline vector<Position>& get_adjacency_list(const Position& position) { return adjacency_list.at(position); }
@@ -1207,6 +1209,7 @@ public:
 	{
 		Stopwatch s("Generate Moves");
 
+		fill_cuts_for_move();
 		assign_objective_to_units();
 
 		for (auto& unit : units_in_order)
@@ -1220,6 +1223,20 @@ public:
 				commands.push_back(Command(MOVE, unit->id, destination));
 				refresh_gamestate_for_movement(unit, destination);
 			}
+		}
+	}
+	void fill_cuts_for_move()
+	{
+		MaxPriorityQueue<Position, double> cuts = find_cuts(true);
+
+		for (int i = 0; i < width; i++)
+			for (int j = 0; j < height; j++)
+				cuts_ally[j][i] = -1.0;
+
+		while (!cuts.empty())
+		{
+			cuts_ally[cuts.elements.top().second.y][cuts.elements.top().second.x] = cuts.elements.top().first;
+			cuts.elements.pop();
 		}
 	}
 	bool unit_can_move_to_destination(const shared_ptr<Unit>& unit, const Position& target)
@@ -1357,27 +1374,26 @@ public:
 			bool enemy_building_on_cell = get_cell(pos).is_occupied_by_enemy_building();
 			bool enemy_territory = get_cell_info(pos) == 'X';
 			bool enemy_territory_inactive = get_cell_info(pos) == 'x';
-			bool close_empty = get_cell_info(pos) == '.' && distance <= 2;
-			bool at_equidistance_between_hq = abs(get_distance(pos, hq_ally->p) - get_distance(pos, hq_enemy->p)) <= 2;
+			bool is_empty = (get_cell_info(pos) == '.');
+			//bool empty_distance_one = get_cell_info(pos) == '.' && distance == 1;
+			//bool empty_distance_two = get_cell_info(pos) == '.' && distance == 2;
+			//bool at_equidistance_between_hq = abs(get_distance(pos, hq_ally->p) - get_distance(pos, hq_enemy->p)) <= 2;
+			bool cut_at_distance_one = get_cuts_ally(pos) > 0 && distance == 1;
 
 			double score = 0.0;
 
-			// add hockey stick with weight on closest
 			// more weight if going into cluster of allies or where less weight?
 
-			score -= distance_to_enemy_hq;
-			score += close_empty * 10.0;
-			//score += empty * min(max(30.0 - 10.0 * distance, 0.0), 20.0);
-			//score += (hq_enemy->p == pos) * 10.0;
+			score += enemy_on_cell * 25.0 / distance;
+			score += enemy_building_on_cell * 20.0 / distance;
+			score += enemy_territory * 15.0 / distance;
+			score += enemy_territory_inactive * 12.5 / distance;
+			score += is_empty * 10.0 / distance;
 
-			score += enemy_on_cell * ((distance == 1) ? 20.0 : 15.0);
-			score += enemy_building_on_cell * ((distance == 1) ? 15.0 : 10.0);
-			score += enemy_territory * ((distance == 1) ? 15.0 : 7.5);
-			//score += enemy_territory * 7.5;
-			//score += enemy_territory_inactive * 5.0;
-			score += enemy_territory_inactive * ((distance == 1) ? 10.0 : 5.0);
+			score += cut_at_distance_one * 100.0;
 			//score += at_equidistance_between_hq * 20.0;
 
+			score -= distance_to_enemy_hq;
 			score -= distance;
 
 			return score;
