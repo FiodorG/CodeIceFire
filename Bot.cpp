@@ -1368,20 +1368,11 @@ public:
 			score += empty_at_distance_one * 10.0;
 			score += (hq_enemy->p == pos) * 10.0;
 
-			if (false)
-			{
-				score += enemy_on_cell * 10.0;
-				score += enemy_building_on_cell * 10.0;
-				score += enemy_territory * 5.0;
-			}
-			else
-			{
-				score += enemy_on_cell * ((distance == 1) ? 20.0 : 15.0);
-				score += enemy_building_on_cell * ((distance == 1) ? 15.0 : 10.0);
-				score += enemy_territory * 7.5;
-				score += enemy_territory_inactive * 5.0;
-				//score += at_equidistance_between_hq * 20.0;
-			}
+			score += enemy_on_cell * ((distance == 1) ? 20.0 : 15.0);
+			score += enemy_building_on_cell * ((distance == 1) ? 15.0 : 10.0);
+			score += enemy_territory * 7.5;
+			score += enemy_territory_inactive * 5.0;
+			//score += at_equidistance_between_hq * 20.0;
 
 			score -= distance;
 
@@ -2030,7 +2021,7 @@ int main()
 
 			g.move_units();
 			g.attempt_chainkill();
-			//g.search_cuts();
+			g.search_cuts();
 			
 			g.build_towers_emergency();
 			//g.build_towers();
