@@ -333,9 +333,10 @@ public:
 	int gold_ally, income_ally;
 	int gold_enemy, income_enemy;
 
-	double score_enemy[width][height];
 	double score_ally[width][height];
+	double score_enemy[width][height];
 	double cuts_ally[width][height];
+	double cuts_enemy[width][height];
 
 	// Utilities
 	inline Cell& get_cell(const Position& position) { return cells[position.y][position.x]; }
@@ -345,6 +346,7 @@ public:
 	inline int get_cells_used_objective(const Position& position) { return cells_used_objective[position.y][position.x]; }
 	inline char get_cell_info(const Position& position) { return cells_info[position.y][position.x]; }
 	inline double get_cuts_ally(const Position& position) { return cuts_ally[position.y][position.x]; }
+	inline double get_cuts_enemy(const Position& position) { return cuts_enemy[position.y][position.x]; }
 	inline double get_score_enemy(const Position& position) { return score_enemy[position.y][position.x]; }
 	inline double get_score_ally(const Position& position) { return score_ally[position.y][position.x]; }
 	inline vector<Position>& get_adjacency_list(const Position& position) { return adjacency_list.at(position); }
@@ -465,6 +467,7 @@ public:
 	}
 	inline void refresh_gamestate_for_movement(shared_ptr<Unit> unit, const Position& destination)
 	{
+		cells_used_movement[unit->p.y][unit->p.x] = 0;
 		cells_used_movement[destination.y][destination.x] = 1;
 		income_ally += (cells_info[destination.y][destination.x] != 'O');
 		cells_info[destination.y][destination.x] = 'O';
@@ -897,6 +900,10 @@ public:
 				for (int j = 0; j < height; j++)
 					if (get_distance(ally->p, Position(i, j)) <= 3)
 						score_ally[j][i] += ally->level;
+
+
+		// 1 node Cuts
+		fill_cuts_for_move();
 	}
 	void compute_adjacency_list_enemy()
 	{
@@ -1002,17 +1009,16 @@ public:
 	}
 	void build_towers_emergency()
 	{
-		Position pos;
+		Position tower_location;
 
-		if (hq_ally->p.x == 0)
-			pos = Position(1, 1);
-		else
-			pos = Position(10, 10);
+		for (auto& position : positions_ally)
+			if (get_distance(position, hq_ally->p) == 1 && get_cell_info(position) == 'O' && get_cell(position).is_empty() && !get_cell(position).mine)
+				tower_location = position;
 
 		for (auto& enemy : units_enemy)
 			if (get_distance(enemy->p, hq_ally->p) <= 10)
 			{
-				commands.push_back(Command(BUILD, "TOWER", pos));
+				commands.push_back(Command(BUILD, "TOWER", tower_location));
 				return;
 			}
 	}
@@ -1209,7 +1215,6 @@ public:
 	{
 		Stopwatch s("Generate Moves");
 
-		fill_cuts_for_move();
 		assign_objective_to_units();
 
 		for (auto& unit : units_in_order)
@@ -1218,7 +1223,7 @@ public:
 			
 			cerr << "Path for: " << unit->id << ", want to move to " << destination.print() << endl;
 
-			if (unit_can_move_to_destination(unit, destination))
+			if (unit_can_move_to_destination(unit, destination) && get_cuts_enemy(unit->p) < 0)
 			{
 				commands.push_back(Command(MOVE, unit->id, destination));
 				refresh_gamestate_for_movement(unit, destination);
@@ -1238,6 +1243,26 @@ public:
 			cuts_ally[cuts.elements.top().second.y][cuts.elements.top().second.x] = cuts.elements.top().first;
 			cuts.elements.pop();
 		}
+
+		cuts = find_cuts(false);
+
+		for (int i = 0; i < width; i++)
+			for (int j = 0; j < height; j++)
+				cuts_enemy[j][i] = -1.0;
+
+		while (!cuts.empty())
+		{
+			cuts_enemy[cuts.elements.top().second.y][cuts.elements.top().second.x] = cuts.elements.top().first;
+			cuts.elements.pop();
+		}
+
+		//cerr << "My cuts:" << endl;
+		//for (auto& row : cuts_enemy)
+		//{
+		//	for (auto& cell : row)
+		//		cerr << cell;
+		//	cerr << endl;
+		//}
 	}
 	bool unit_can_move_to_destination(const shared_ptr<Unit>& unit, const Position& target)
 	{
@@ -1375,9 +1400,6 @@ public:
 			bool enemy_territory = get_cell_info(pos) == 'X';
 			bool enemy_territory_inactive = get_cell_info(pos) == 'x';
 			bool is_empty = (get_cell_info(pos) == '.');
-			//bool empty_distance_one = get_cell_info(pos) == '.' && distance == 1;
-			//bool empty_distance_two = get_cell_info(pos) == '.' && distance == 2;
-			//bool at_equidistance_between_hq = abs(get_distance(pos, hq_ally->p) - get_distance(pos, hq_enemy->p)) <= 2;
 			bool cut_at_distance_one = get_cuts_ally(pos) > 0 && distance == 1;
 
 			double score = 0.0;
@@ -1391,7 +1413,6 @@ public:
 			score += is_empty * 10.0 / distance;
 
 			score += cut_at_distance_one * 100.0;
-			//score += at_equidistance_between_hq * 20.0;
 
 			score -= distance_to_enemy_hq;
 			score -= distance;
@@ -1462,7 +1483,6 @@ public:
 			{
 				commands.push_back(Command(TRAIN, level_required, cut));
 				refresh_gamestate_for_spawn(make_shared<Unit>(Unit(cut.x, cut.y, 999, level_required, 0)), cut);
-				// fill the cut with inactive cells
 			}
 
 			cuts.elements.pop();
@@ -2035,9 +2055,9 @@ int main()
 
 			g.move_units();
 			g.attempt_chainkill();
+			g.build_towers_emergency();
 			g.search_cuts();
 			
-			g.build_towers_emergency();
 			//g.build_towers();
 
 			g.train_units_on_cuts();
