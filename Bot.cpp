@@ -333,9 +333,10 @@ public:
 	int gold_ally, income_ally;
 	int gold_enemy, income_enemy;
 
-	double score_enemy[width][height];
 	double score_ally[width][height];
+	double score_enemy[width][height];
 	double cuts_ally[width][height];
+	double cuts_enemy[width][height];
 
 	// Utilities
 	inline Cell& get_cell(const Position& position) { return cells[position.y][position.x]; }
@@ -345,6 +346,7 @@ public:
 	inline int get_cells_used_objective(const Position& position) { return cells_used_objective[position.y][position.x]; }
 	inline char get_cell_info(const Position& position) { return cells_info[position.y][position.x]; }
 	inline double get_cuts_ally(const Position& position) { return cuts_ally[position.y][position.x]; }
+	inline double get_cuts_enemy(const Position& position) { return cuts_enemy[position.y][position.x]; }
 	inline double get_score_enemy(const Position& position) { return score_enemy[position.y][position.x]; }
 	inline double get_score_ally(const Position& position) { return score_ally[position.y][position.x]; }
 	inline vector<Position>& get_adjacency_list(const Position& position) { return adjacency_list.at(position); }
@@ -727,7 +729,7 @@ public:
 				units_ally.push_back(unit);
 			else
 				units_enemy.push_back(unit);
-
+			
 			cells[unit->p.y][unit->p.x].set_unit(unit);
 		}
 		
@@ -889,7 +891,7 @@ public:
 		for (auto& enemy : units_enemy)
 			for (int i = 0; i < width; i++)
 				for (int j = 0; j < height; j++)
-					if (get_distance(enemy->p, Position(i, j)) <= 3)
+					if (get_distance(enemy->p, Position(i, j)) <= 3 && get_cell_info(enemy->p) == 'X')
 						score_enemy[j][i] += enemy->level;
 
 		for (auto& ally : units_ally)
@@ -1002,17 +1004,18 @@ public:
 	}
 	void build_towers_emergency()
 	{
-		Position pos;
+		static bool created_emergency_tower = false;
 
-		if (hq_ally->p.x == 0)
-			pos = Position(1, 1);
-		else
-			pos = Position(10, 10);
+		Position tower_location;
+		for (auto& position : positions_ally)
+			if (get_distance(position, hq_ally->p) == 1 && get_cell_info(position) == 'O' && get_cell(position).is_empty() && !get_cell(position).mine)
+				tower_location = position;
 
 		for (auto& enemy : units_enemy)
-			if (get_distance(enemy->p, hq_ally->p) <= 10)
+			if (get_distance(enemy->p, hq_ally->p) <= 10 && !created_emergency_tower)
 			{
-				commands.push_back(Command(BUILD, "TOWER", pos));
+				commands.push_back(Command(BUILD, "TOWER", tower_location));
+				created_emergency_tower = true;
 				return;
 			}
 	}
@@ -1238,6 +1241,26 @@ public:
 			cuts_ally[cuts.elements.top().second.y][cuts.elements.top().second.x] = cuts.elements.top().first;
 			cuts.elements.pop();
 		}
+
+		cuts = find_cuts(false);
+
+		for (int i = 0; i < width; i++)
+			for (int j = 0; j < height; j++)
+				cuts_enemy[j][i] = -1.0;
+
+		while (!cuts.empty())
+		{
+			cuts_enemy[cuts.elements.top().second.y][cuts.elements.top().second.x] = cuts.elements.top().first;
+			cuts.elements.pop();
+		}
+
+		//cerr << "My cuts:" << endl;
+		//for (auto& row : cuts_enemy)
+		//{
+		//	for (auto& cell : row)
+		//		cerr << cell;
+		//	cerr << endl;
+		//}
 	}
 	bool unit_can_move_to_destination(const shared_ptr<Unit>& unit, const Position& target)
 	{
@@ -1375,9 +1398,6 @@ public:
 			bool enemy_territory = get_cell_info(pos) == 'X';
 			bool enemy_territory_inactive = get_cell_info(pos) == 'x';
 			bool is_empty = (get_cell_info(pos) == '.');
-			//bool empty_distance_one = get_cell_info(pos) == '.' && distance == 1;
-			//bool empty_distance_two = get_cell_info(pos) == '.' && distance == 2;
-			//bool at_equidistance_between_hq = abs(get_distance(pos, hq_ally->p) - get_distance(pos, hq_enemy->p)) <= 2;
 			bool cut_at_distance_one = get_cuts_ally(pos) > 0 && distance == 1;
 
 			double score = 0.0;
@@ -1391,7 +1411,6 @@ public:
 			score += is_empty * 10.0 / distance;
 
 			score += cut_at_distance_one * 100.0;
-			//score += at_equidistance_between_hq * 20.0;
 
 			score -= distance_to_enemy_hq;
 			score -= distance;
@@ -1458,11 +1477,10 @@ public:
 
 			cerr << "Cut: " << cut.print() << ", gain " << gain << ", cost: " << cost << ", score: " << score << endl;
 
-			if (score > 0 && level_required <= 3 && can_train_level(level_required))
+			if (score > 0.0 && level_required <= 3 && can_train_level(level_required))
 			{
 				commands.push_back(Command(TRAIN, level_required, cut));
 				refresh_gamestate_for_spawn(make_shared<Unit>(Unit(cut.x, cut.y, 999, level_required, 0)), cut);
-				// fill the cut with inactive cells
 			}
 
 			cuts.elements.pop();
@@ -1485,13 +1503,14 @@ public:
 			for (auto& neighbor : adjacency_list_positions[articulation_point])
 			{
 				vector<Position> graph = find_graph_from_source(neighbor, articulation_point, find_enemies);
-				score += score_graph(graph, find_enemies);
+				score += score_graph(graph);
 
 				//string string1 = "graph: ";
 				//for (auto& pos : graph)
 				//	string1 += pos.print() + ", ";
 				//cerr << string1 << endl;
 			}
+			score += score_graph({ articulation_point });
 			scores.put(articulation_point, score);
 		}
 
@@ -1505,10 +1524,8 @@ public:
 
 		return scores;
 	}
-	double score_graph(vector<Position>& positions, bool find_enemies)
+	double score_graph(const vector<Position>& positions)
 	{
-		Position hq = find_enemies ? hq_ally->p : hq_enemy->p;
-
 		double score = 0.0;
 		for (auto& position : positions)
 		{
@@ -1774,6 +1791,24 @@ public:
 	inline double get_cut_cost(const vector<Position> cut)
 	{
 		double cost = 0.0;
+
+		//bool just_captured_tower = false;
+		//for (auto& position : cut)
+		//{
+		//	if (just_captured_tower && !get_cell(position).is_occupied_by_enemy_tower())
+		//	{
+		//		cost += (get_cell(position).is)
+		//		just_captured_tower = false;
+		//	}
+		//	else
+		//		cost += get_cells_level_ally(position) * 10.0;
+
+		//	if (get_cell(position).is_occupied_by_enemy_tower())
+		//		just_captured_tower = true;
+		//	else
+		//		just_captured_tower = false;
+		//}
+
 		for (auto& position : cut)
 			cost += get_cells_level_ally(position) * 10.0;
 
@@ -1822,56 +1857,67 @@ public:
 
 
 	// Simulation
-	double search_cuts()
+	void search_cuts()
 	{
 		Stopwatch s("Find cuts");
 
-		vector<Position> frontier = get_frontier_enemy(1);
-
-		//string s1 = "Frontier: ";
-		//for (auto& t : frontier)
-		//	s1 += t.print() + ", ";
-		//cerr << s1 << endl;
-
-		double max_score = -DBL_MAX;
-		double max_cost = DBL_MAX;
-		vector<Position> max_cut;
-
-		for (auto& position : frontier)
+		bool need_refresh = true;
+		unordered_map<shared_ptr<vector<Position>>, double> cuts;
+		while(true)
 		{
-			auto pair = search({ position }, 4);
-
-			if (pair.first > max_score)
+			if (need_refresh)
 			{
-				max_score = pair.first;
-				max_cost = get_cut_cost(pair.second);
-				max_cut = pair.second;
+				cuts.clear();
+				for (auto& position : get_frontier_enemy(1))
+				{
+					auto pair = search({ position }, 4);
+
+					if (pair.first > 0.0)
+						cuts.emplace(make_shared<vector<Position>>(pair.second), pair.first);
+				}
+
+				if (cuts.empty())
+					return;
+
+				need_refresh = false;
+			}
+			
+			auto best_cut = max_element(cuts.begin(), cuts.end(), [](const pair<shared_ptr<vector<Position>>, double>& p1, const pair<shared_ptr<vector<Position>>, double>& p2) { return p1.second < p2.second; });
+			vector<Position> positions = *(best_cut->first);
+			double score = best_cut->second;
+			double cost = get_cut_cost(positions);
+
+			for (auto& t : cuts)
+			{
+				string s1 = "";
+				for (auto& p : *(t.first))
+					s1 += p.print() + ", ";
+				cerr << "Chain: " << s1 << "Score: " << t.second << " Cost:" << get_cut_cost(*(t.first)) << endl;
 			}
 
-			/*string s1 = "";
-			for (auto& t : pair.second)
-				s1 += t.print() + ", ";
+			if (score < 0.0)
+				return;
 
-			cerr << "Chain: " << s1 << "Score: " << pair.first << " Cost:" << get_cut_cost(pair.second) << endl;*/
-		}
-
-		if (max_score > 0.0 && max_cost <= (double)gold_ally)
-		{
-			string s1 = "";
-			for (auto& t : max_cut)
-				s1 += t.print() + ", ";
-
-			cerr << "CUTTING!" << endl;
-			cerr << "Cutting: " << s1 << "Score: " << max_score << " Cost:" << max_cost << endl;
-
-			for (auto& position : max_cut)
+			if (cost <= (double)gold_ally)
 			{
-				int level_required = get_cells_level_ally(position);
-				commands.push_back(Command(TRAIN, level_required, position));
-				refresh_gamestate_for_spawn(make_shared<Unit>(Unit(position.x, position.y, 999, level_required, 0)), position);
+				string s1 = "";
+				for (auto& t : positions)
+					s1 += t.print() + ", ";
+				cerr << "CUTTING! " << s1 << "Score: " << score << " Cost:" << cost << endl;
+
+				for (auto& position : positions)
+				{
+					int level_required = get_cells_level_ally(position);
+					commands.push_back(Command(TRAIN, level_required, position));
+					refresh_gamestate_for_spawn(make_shared<Unit>(Unit(position.x, position.y, 999, level_required, 0)), position);
+				}
+				need_refresh = true;
 			}
+
+			cuts.erase(best_cut);
 		}
 	}
+
 	pair<double, vector<Position>> search(const vector<Position>& forbidden, int depth)
 	{
 		if (depth > 0)
@@ -1926,12 +1972,14 @@ public:
 					)
 				{
 					vector<Position> cut_graph = graph_with_excluded_nodes(position, forbidden);
-					cut_gain += score_graph(cut_graph, true);
+					cut_gain += score_graph(cut_graph);
 
 					for (auto& position_to_remove : cut_graph)
 						positions_to_check.erase(position_to_remove);
 				}
 			}
+
+			cut_gain += score_graph(forbidden);
 
 			//string s1 = "";
 			//for (auto& t : forbidden)
@@ -2037,7 +2085,7 @@ int main()
 			g.attempt_chainkill();
 			g.search_cuts();
 			
-			g.build_towers_emergency();
+			//g.build_towers_emergency();
 			//g.build_towers();
 
 			g.train_units_on_cuts();
