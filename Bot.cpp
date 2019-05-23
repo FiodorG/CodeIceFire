@@ -1503,7 +1503,7 @@ public:
 			for (auto& neighbor : adjacency_list_positions[articulation_point])
 			{
 				vector<Position> graph = find_graph_from_source(neighbor, articulation_point, find_enemies);
-				score += score_graph(graph, find_enemies);
+				score += score_graph(graph) + score_graph({ articulation_point });
 
 				//string string1 = "graph: ";
 				//for (auto& pos : graph)
@@ -1523,10 +1523,8 @@ public:
 
 		return scores;
 	}
-	double score_graph(vector<Position>& positions, bool find_enemies)
+	double score_graph(const vector<Position>& positions)
 	{
-		Position hq = find_enemies ? hq_ally->p : hq_enemy->p;
-
 		double score = 0.0;
 		for (auto& position : positions)
 		{
@@ -1792,6 +1790,24 @@ public:
 	inline double get_cut_cost(const vector<Position> cut)
 	{
 		double cost = 0.0;
+
+		//bool just_captured_tower = false;
+		//for (auto& position : cut)
+		//{
+		//	if (just_captured_tower && !get_cell(position).is_occupied_by_enemy_tower())
+		//	{
+		//		cost += (get_cell(position).is)
+		//		just_captured_tower = false;
+		//	}
+		//	else
+		//		cost += get_cells_level_ally(position) * 10.0;
+
+		//	if (get_cell(position).is_occupied_by_enemy_tower())
+		//		just_captured_tower = true;
+		//	else
+		//		just_captured_tower = false;
+		//}
+
 		for (auto& position : cut)
 			cost += get_cells_level_ally(position) * 10.0;
 
@@ -1944,7 +1960,7 @@ public:
 					)
 				{
 					vector<Position> cut_graph = graph_with_excluded_nodes(position, forbidden);
-					cut_gain += score_graph(cut_graph, true);
+					cut_gain += score_graph(cut_graph) + score_graph(forbidden);
 
 					for (auto& position_to_remove : cut_graph)
 						positions_to_check.erase(position_to_remove);
@@ -2053,12 +2069,12 @@ int main()
 
 			g.move_units();
 			g.attempt_chainkill();
-			//g.build_towers_emergency();
 			g.search_cuts();
 			
+			//g.build_towers_emergency();
 			//g.build_towers();
 
-			//g.train_units_on_cuts();
+			g.train_units_on_cuts();
 			g.train_units();
 
 			g.debug();
