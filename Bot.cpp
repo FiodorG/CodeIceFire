@@ -553,14 +553,13 @@ public:
 		//	cerr << endl;
 		//} 
 
-		cerr << "Level" << endl;
-		for (auto& row : cells_level_ally)
-		{
-			for (auto& cell : row)
-				cerr << cell;
-
-			cerr << endl;
-		}
+		//cerr << "Level" << endl;
+		//for (auto& row : cells_level_ally)
+		//{
+		//	for (auto& cell : row)
+		//		cerr << cell;
+		//	cerr << endl;
+		//}
 
 		//cerr << "Enemy score" << endl;
 		//for (auto& row : score_enemy)
@@ -711,6 +710,22 @@ public:
 				cells_info[j][i] = 'x';
 				cerr << "Inactivating cell " << Position(i, j).print() << endl;
 			}
+
+		bool repeat = true;
+		while (repeat)
+		{
+			repeat = false;
+			for (int i = 0; i < width; i++)
+			for (int j = 0; j < height; j++)
+				if (cells_info[j][i] == 'o')
+				if (cells_info[min(j + 1, width)][i] == 'O' || cells_info[max(j - 1, 0)][i] == 'O' || cells_info[j][min(i + 1, height)] == 'O' || cells_info[j][max(i - 1, 0)] == 'O')
+				{
+					cells_info[j][i] = 'O';
+					cerr << "Reactivating cell " << Position(i, j).print() << endl;
+					repeat = true;
+				}
+		}
+		
 
 		// Cells
 		cells.clear();
@@ -1887,13 +1902,13 @@ public:
 			double score = best_cut->second;
 			double cost = get_cut_cost(positions);
 
-			for (auto& t : cuts)
-			{
-				string s1 = "";
-				for (auto& p : *(t.first))
-					s1 += p.print() + ", ";
-				cerr << "Chain: " << s1 << "Score: " << t.second << " Cost:" << get_cut_cost(*(t.first)) << endl;
-			}
+			//for (auto& t : cuts)
+			//{
+			//	string s1 = "";
+			//	for (auto& p : *(t.first))
+			//		s1 += p.print() + ", ";
+			//	cerr << "Chain: " << s1 << "Score: " << t.second << " Cost:" << get_cut_cost(*(t.first)) << endl;
+			//}
 
 			if (score < 0.0)
 				return;
