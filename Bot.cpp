@@ -539,7 +539,7 @@ public:
 		//	cerr << endl;
 		//}
 
-		//for (auto& row : cells_info)
+		//for (auto& row : cells_level_ally)
 		//{
 		//	for (auto& cell : row)
 		//		cerr << cell;
@@ -741,11 +741,15 @@ public:
 		for (auto& unit : units)
 		{
 			if (unit->isOwned())
+			{
 				units_ally.push_back(unit);
-			else
+				cells[unit->p.y][unit->p.x].set_unit(unit);
+			}
+			else if (get_cell_info(unit->p) == 'X')
+			{
 				units_enemy.push_back(unit);
-			
-			cells[unit->p.y][unit->p.x].set_unit(unit);
+				cells[unit->p.y][unit->p.x].set_unit(unit);
+			}
 		}
 		
 		// Buildings
@@ -754,11 +758,15 @@ public:
 		for (auto& building : buildings)
 		{
 			if (building->isOwned())
+			{
 				buildings_ally.push_back(building);
-			else
+				cells[building->p.y][building->p.x].set_building(building);
+			}
+			else if (get_cell_info(building->p) == 'X')
+			{
 				buildings_enemy.push_back(building);
-
-			cells[building->p.y][building->p.x].set_building(building);
+				cells[building->p.y][building->p.x].set_building(building);
+			}
 		}
 
 		// Mines
