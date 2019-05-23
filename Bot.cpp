@@ -467,7 +467,6 @@ public:
 	}
 	inline void refresh_gamestate_for_movement(shared_ptr<Unit> unit, const Position& destination)
 	{
-		cells_used_movement[unit->p.y][unit->p.x] = 0;
 		cells_used_movement[destination.y][destination.x] = 1;
 		income_ally += (cells_info[destination.y][destination.x] != 'O');
 		cells_info[destination.y][destination.x] = 'O';
@@ -900,10 +899,6 @@ public:
 				for (int j = 0; j < height; j++)
 					if (get_distance(ally->p, Position(i, j)) <= 3)
 						score_ally[j][i] += ally->level;
-
-
-		// 1 node Cuts
-		fill_cuts_for_move();
 	}
 	void compute_adjacency_list_enemy()
 	{
@@ -1009,16 +1004,18 @@ public:
 	}
 	void build_towers_emergency()
 	{
-		Position tower_location;
+		static bool created_emergency_tower = false;
 
+		Position tower_location;
 		for (auto& position : positions_ally)
 			if (get_distance(position, hq_ally->p) == 1 && get_cell_info(position) == 'O' && get_cell(position).is_empty() && !get_cell(position).mine)
 				tower_location = position;
 
 		for (auto& enemy : units_enemy)
-			if (get_distance(enemy->p, hq_ally->p) <= 10)
+			if (get_distance(enemy->p, hq_ally->p) <= 10 && !created_emergency_tower)
 			{
 				commands.push_back(Command(BUILD, "TOWER", tower_location));
+				created_emergency_tower = true;
 				return;
 			}
 	}
@@ -1215,6 +1212,7 @@ public:
 	{
 		Stopwatch s("Generate Moves");
 
+		fill_cuts_for_move();
 		assign_objective_to_units();
 
 		for (auto& unit : units_in_order)
@@ -1223,7 +1221,7 @@ public:
 			
 			cerr << "Path for: " << unit->id << ", want to move to " << destination.print() << endl;
 
-			if (unit_can_move_to_destination(unit, destination) && get_cuts_enemy(unit->p) < 0)
+			if (unit_can_move_to_destination(unit, destination))
 			{
 				commands.push_back(Command(MOVE, unit->id, destination));
 				refresh_gamestate_for_movement(unit, destination);
@@ -2055,12 +2053,12 @@ int main()
 
 			g.move_units();
 			g.attempt_chainkill();
-			g.build_towers_emergency();
+			//g.build_towers_emergency();
 			g.search_cuts();
 			
 			//g.build_towers();
 
-			g.train_units_on_cuts();
+			//g.train_units_on_cuts();
 			g.train_units();
 
 			g.debug();
