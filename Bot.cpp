@@ -321,12 +321,13 @@ public:
 
 	unordered_map<Position, vector<Position>, HashPosition> adjacency_list;
 	unordered_map<Position, vector<Position>, HashPosition> adjacency_list_position_enemy;
+	unordered_map<Position, vector<Position>, HashPosition> adjacency_list_position_enemy_for_cut;
 	unordered_map<Position, vector<Position>, HashPosition> adjacency_list_position_ally;
 
 	vector<vector<Cell>> cells;
 	char cells_info[width][height]; // stores the chars representing the cell type
-	vector<vector<int>> cells_used_objective; // used for objective
-	vector<vector<int>> cells_used_movement; // used for movement
+	int cells_used_objective[width][height]; // used for objective
+	int cells_used_movement[width][height]; // used for movement
 	int cells_level_ally[width][height]; // level required to move to cell
 	int cells_level_enemy[width][height]; // level required to move to cell
 
@@ -515,6 +516,19 @@ public:
 			}
 		return frontier;
 	}
+	inline vector<Position> get_frontier_spawn(int distance)
+	{
+		vector<Position> frontier;
+		for (int i = 0; i < width; i++)
+		for (int j = 0; j < height; j++)
+		for (auto& position_ally : positions_ally)
+		if (get_distance(Position(i, j), position_ally) == distance && (get_cell_info(Position(i, j)) == '.' || get_cell_info(Position(i, j)) == 'X' || get_cell_info(Position(i, j)) == 'x'))
+		{
+			frontier.push_back(Position(i, j));
+			break;
+		}
+		return frontier;
+	}
 
 
 	// Main functions
@@ -620,6 +634,28 @@ public:
 		cerr << "cut graph size: " << cut_graph.size() << endl;
 		cerr << "cut graph gain: " << cut_gain << endl;
 		cerr << "cut score: " << score_cut(cut) << endl;*/
+
+		//auto t = get_frontier_spawn(1);
+		//string s1 = "";
+		//for (auto& tt : t)
+		//	s1 += tt.print() + ", ";
+		//cerr << "Frontier:" << s1 << endl;
+
+		//cerr << "Adj list:" << endl;
+		//for (auto& t : adjacency_list_position_enemy_for_cut)
+		//{
+		//	string s2 = t.first.print() + ": ";
+		//	for (auto& tt : t.second)
+		//		s2 += tt.print() + ", ";
+		//	cerr << s2 << endl;
+		//}
+
+		//auto t = graph_with_excluded_nodes_including(hq_enemy->p, { Position(10, 9), Position(9, 9) });
+		//cerr << "size: " << t.size() << endl;
+		//string s1 = "";
+		//for (auto& t : t)
+		//	s1 += t.print() + ", ";
+		//cerr << s1 << endl;
 	}
 	void init() 
 	{
@@ -689,8 +725,9 @@ public:
 			units.push_back(make_shared<Unit>(Unit(x, y, unitId, level, owner)));
 		}
 
-		cells_used_objective = vector<vector<int>>(width, vector<int>(height, 0));
-		cells_used_movement = vector<vector<int>>(width, vector<int>(height, 0));
+		for (int i = 0; i < width; i++)
+			for (int j = 0; j < height; j++)
+				cells_used_objective[j][i] = cells_used_movement[j][i] = 0;
 
 		if (turn <= 1)
 		{
@@ -733,11 +770,19 @@ public:
 
 		for (int i = 0; i < width; i++)
 			for (int j = 0; j < height; j++)
+			{
 				cells[j][i] = Cell(i, j);
+
+				if (cells_info[j][i] == '#')
+					cells[j][i].set_void_cell();
+			}
+			
 
 		// Units
 		units_ally.clear();
+		units_ally.reserve(units.size());
 		units_enemy.clear();
+		units_enemy.reserve(units.size());
 		for (auto& unit : units)
 		{
 			if (unit->isOwned())
@@ -754,7 +799,9 @@ public:
 		
 		// Buildings
 		buildings_ally.clear();
+		buildings_ally.reserve(buildings.size());
 		buildings_enemy.clear();
+		buildings_enemy.reserve(buildings.size());
 		for (auto& building : buildings)
 		{
 			if (building->isOwned())
@@ -773,16 +820,12 @@ public:
 		for (auto& mine : mine_spots)
 			cells[mine.y][mine.x].set_mine();
 
-		// Voids
-		for (int i = 0; i < width; i++)
-			for (int j = 0; j < height; j++)
-				if (cells_info[j][i] == '#')
-					cells[j][i].set_void_cell();
 
 		// Level required to move to cell
 		for (auto& row : cells)
 			for (auto& cell : row)
 			{
+				// Ally
 				if (cell.is_occupied_by_ally_hq())
 					cells_level_ally[cell.position.y][cell.position.x] = 9;
 				else if (cell.is_occupied_by_enemy_hq())
@@ -801,30 +844,8 @@ public:
 					cells_level_ally[cell.position.y][cell.position.x] = 9;
 				else
 					cells_level_ally[cell.position.y][cell.position.x] = 1;
-			}
 
-		for (auto& row : cells)
-		for (auto& cell : row)
-			if (cell.is_occupied_by_enemy_tower())
-			{
-				cells_level_ally[cell.position.y][cell.position.x] = 3;
-
-				if (get_cell_info(Position(cell.position.x, min(cell.position.y + 1, width - 1))) == 'X')
-					cells_level_ally[min(cell.position.y + 1, width - 1)][cell.position.x] = 3;
-
-				if (get_cell_info(Position(cell.position.x, max(cell.position.y - 1, 0))) == 'X')
-					cells_level_ally[max(cell.position.y - 1, 0)][cell.position.x] = 3;
-
-				if (get_cell_info(Position(min(cell.position.x + 1, height - 1), cell.position.y)) == 'X')
-					cells_level_ally[cell.position.y][min(cell.position.x + 1, height - 1)] = 3;
-
-				if (get_cell_info(Position(max(cell.position.x - 1, 0), cell.position.y)) == 'X')
-					cells_level_ally[cell.position.y][max(cell.position.x - 1, 0)] = 3;
-			}
-
-		for (auto& row : cells)
-			for (auto& cell : row)
-			{
+				// Enemy
 				if (cell.is_occupied_by_enemy_hq())
 					cells_level_enemy[cell.position.y][cell.position.x] = 9;
 				else if (cell.is_occupied_by_ally_hq())
@@ -847,6 +868,25 @@ public:
 
 		for (auto& row : cells)
 			for (auto& cell : row)
+				if (cell.is_occupied_by_enemy_tower())
+				{
+					cells_level_ally[cell.position.y][cell.position.x] = 3;
+
+					if (get_cell_info(Position(cell.position.x, min(cell.position.y + 1, width - 1))) == 'X')
+						cells_level_ally[min(cell.position.y + 1, width - 1)][cell.position.x] = 3;
+
+					if (get_cell_info(Position(cell.position.x, max(cell.position.y - 1, 0))) == 'X')
+						cells_level_ally[max(cell.position.y - 1, 0)][cell.position.x] = 3;
+
+					if (get_cell_info(Position(min(cell.position.x + 1, height - 1), cell.position.y)) == 'X')
+						cells_level_ally[cell.position.y][min(cell.position.x + 1, height - 1)] = 3;
+
+					if (get_cell_info(Position(max(cell.position.x - 1, 0), cell.position.y)) == 'X')
+						cells_level_ally[cell.position.y][max(cell.position.x - 1, 0)] = 3;
+				}
+
+		for (auto& row : cells)
+			for (auto& cell : row)
 				if (cell.is_occupied_by_ally_tower())
 				{
 					cells_level_enemy[cell.position.y][cell.position.x] = 3;
@@ -863,6 +903,7 @@ public:
 					if (get_cell_info(Position(max(cell.position.x - 1, 0), cell.position.y)) == 'O')
 						cells_level_enemy[cell.position.y][max(cell.position.x - 1, 0)] = 3;
 				}
+
 
 		// Adjacency list
 		adjacency_list.clear();
@@ -953,6 +994,42 @@ public:
 
 			adjacency_list_position_enemy[position] = positions;
 		}
+	}
+	void compute_adjacency_list_enemy_for_cut()
+	{
+		adjacency_list_position_enemy_for_cut.clear();
+		for (int i = 0; i < width; ++i)
+			for (int j = 0; j < height; ++j)
+			{
+				vector<Position> positions;
+				Position position(i, j);
+
+				char info = get_cell_info(position);
+				if (info != 'X' && info != 'x' && info != '.')
+					continue;
+
+				Position north_position = position.north_position();
+				char north_info = get_cell_info(north_position);
+				if ((north_info == 'X' || north_info == 'x' || north_info == '.') && north_position != position)
+					positions.push_back(north_position);
+
+				Position south_position = position.south_position();
+				char south_info = get_cell_info(south_position);
+				if ((south_info == 'X' || south_info == 'x' || south_info == '.') && south_position != position)
+					positions.push_back(south_position);
+
+				Position east_position = position.east_position();
+				char east_info = get_cell_info(east_position);
+				if ((east_info == 'X' || east_info == 'x' || east_info == '.') && east_position != position)
+					positions.push_back(east_position);
+
+				Position west_position = position.west_position();
+				char west_info = get_cell_info(west_position);
+				if ((west_info == 'X' || west_info == 'x' || west_info == '.') && west_position != position)
+					positions.push_back(west_position);
+
+				adjacency_list_position_enemy_for_cut[position] = positions;
+			}
 	}
 	void compute_adjacency_list_ally()
 	{
@@ -1890,8 +1967,10 @@ public:
 		{
 			if (need_refresh)
 			{
+				compute_adjacency_list_enemy_for_cut();
+
 				cuts.clear();
-				for (auto& position : get_frontier_enemy(1))
+				for (auto& position : get_frontier_spawn(1))
 				{
 					auto pair = search({ position }, 4);
 
@@ -1940,7 +2019,6 @@ public:
 			cuts.erase(best_cut);
 		}
 	}
-
 	pair<double, vector<Position>> search(const vector<Position>& forbidden, int depth)
 	{
 		if (depth > 0)
@@ -1948,7 +2026,7 @@ public:
 			double max_score = score_cut(forbidden);
 			vector<Position> max_cut = forbidden;
 
-			for (auto& child : adjacency_list_position_enemy[forbidden.back()])
+			for (auto& child : adjacency_list_position_enemy_for_cut[forbidden.back()])
 			if(find(forbidden.begin(), forbidden.end(), child) == forbidden.end())
 			{
 				vector<Position> new_forbidden = forbidden;
@@ -1978,9 +2056,9 @@ public:
 		if (cut_cost > gold_ally)
 			return -DBL_MAX;
 
-		vector<Position> tree_from_enemy_hq = graph_with_excluded_nodes(hq_enemy->p, forbidden);
+		vector<Position> tree_from_enemy_hq = graph_with_excluded_nodes_including(hq_enemy->p, forbidden);
 
-		if (tree_from_enemy_hq.size() != positions_enemy.size() - forbidden.size())
+		if (tree_from_enemy_hq.size() != positions_enemy.size())
 		{
 			double cut_gain = 0.0;
 			unordered_set<Position, HashPosition> positions_to_check(positions_enemy.begin(), positions_enemy.end());
@@ -1989,13 +2067,15 @@ public:
 				Position position = *(positions_to_check.begin());
 				positions_to_check.erase(position);
 
-				if (
-					(find(tree_from_enemy_hq.begin(), tree_from_enemy_hq.end(), position) == tree_from_enemy_hq.end()) &&
-					(find(forbidden.begin(), forbidden.end(), position) == forbidden.end())
-					)
+				if (find(tree_from_enemy_hq.begin(), tree_from_enemy_hq.end(), position) == tree_from_enemy_hq.end())
 				{
 					vector<Position> cut_graph = graph_with_excluded_nodes(position, forbidden);
 					cut_gain += score_graph(cut_graph);
+
+					//string s0 = "cut graph, gain" + to_string(cut_gain) + ", ";
+					//for (auto& t : cut_graph)
+					//	s0 += t.print() + ", ";
+					//cerr << s0 << endl;
 
 					for (auto& position_to_remove : cut_graph)
 						positions_to_check.erase(position_to_remove);
@@ -2004,6 +2084,14 @@ public:
 
 			cut_gain += score_graph(forbidden);
 
+			//string s1 = "";
+			//for (auto& t : forbidden)
+			//	s1 += t.print() + ", ";
+			//cerr << s1 << " gain: " << cut_gain << " cost: " << cut_cost << " score: " << cut_gain - cut_cost << endl;
+			//string s2 = "Tree from enemy HQ";
+			//for (auto& t : tree_from_enemy_hq)
+			//	s2 += t.print() + ", ";
+			//cerr << "size: " << tree_from_enemy_hq.size() << " total: " << positions_enemy.size() << " " << s2 << endl;
 			//string s1 = "";
 			//for (auto& t : forbidden)
 			//	s1 += t.print() + ", ";
@@ -2038,6 +2126,42 @@ public:
 					visited[next.y][next.x] = true;
 					frontier.push(next);
 					graph.push_back(next);
+				}
+			}
+		}
+
+		return graph;
+	}
+	vector<Position> graph_with_excluded_nodes_including(const Position& source, const vector<Position>& forbidden)
+	{
+		bool visited[width][height] = {};
+		visited[source.y][source.x] = true;
+
+		queue<Position> frontier;
+		frontier.push(source);
+
+		vector<Position> graph;
+		graph.reserve(width * height);
+		graph.push_back(source);
+
+		while (!frontier.empty())
+		{
+			Position current = frontier.front();
+			frontier.pop();
+
+			for (const Position& next : adjacency_list_position_enemy[current])
+			{
+				if (!visited[next.y][next.x])
+				{
+					bool next_in_forbidden = find(forbidden.begin(), forbidden.end(), next) != forbidden.end();
+					bool current_in_forbidden = find(forbidden.begin(), forbidden.end(), current) != forbidden.end();
+
+					if (!current_in_forbidden || (current_in_forbidden && next_in_forbidden))
+					{
+						visited[next.y][next.x] = true;
+						graph.push_back(next);
+						frontier.push(next);
+					}
 				}
 			}
 		}
