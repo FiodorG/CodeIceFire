@@ -1791,7 +1791,6 @@ public:
 			//string s1;
 			//for (auto& t : chainkill_path)
 			//	s1 += t.print() + ", ";
-
 			//cerr << s1 << endl;
 
 			double score = get_cut_cost(chainkill_path, true);
@@ -1799,8 +1798,7 @@ public:
 			if (score >= gold_ally)
 				return;
 
-			for (auto& t : chainkill_path)
-				commands.push_back(Command(TRAIN, get_cells_level_ally(t), t));
+			execute_cut(chainkill_path);
 
 			cerr << "WILL CHAINKILL!" << endl;
 		}
@@ -1820,7 +1818,7 @@ public:
 			for (const Position& next : get_adjacency_list(current))
 			if (get_cell_info(next) != 'O')
 			{
-				double new_cost = cost_so_far[current] + get_cells_level_ally(next) * 10.0;
+				double new_cost = cost_so_far[current] + get_cells_level_ally(next) * 10.0 * (get_cell_info(next) != 'o');
 
 				if ((cost_so_far.find(next) == cost_so_far.end()) || (new_cost < cost_so_far[next]))
 				{
@@ -1850,7 +1848,7 @@ public:
 			for (const Position& next : get_adjacency_list(current))
 				if (get_cell_info(next) != 'O')
 				{
-					double new_cost = cost_so_far[current] + get_cells_level_ally(next) * 10.0;
+					double new_cost = cost_so_far[current] + get_cells_level_ally(next) * 10.0 * (get_cell_info(next) != 'o');
 
 					if ((cost_so_far.find(next) == cost_so_far.end()) || (new_cost < cost_so_far[next]))
 					{
@@ -1887,15 +1885,36 @@ public:
 		if (my_pov)
 		{
 			for (auto& position : cut)
-				cost += get_cells_level_ally(position) * 10.0;
+				if (get_cell_info(position) != 'o')
+					cost += get_cells_level_ally(position) * 10.0;
 		}
 		else
 		{
 			for (auto& position : cut)
-				cost += get_cells_level_enemy(position) * 10.0; 
+				if (get_cell_info(position) != 'x')
+					cost += get_cells_level_enemy(position) * 10.0; 
 		}
 		
 		return cost;
+	}
+	void execute_cut(const vector<Position>& cut)
+	{
+		for (auto& position : cut)
+		{
+			int level_required = get_cells_level_ally(position);
+
+			if (get_cell_info(position) != 'o')
+			{
+				commands.push_back(Command(TRAIN, level_required, position));
+				refresh_gamestate_for_spawn(make_shared<Unit>(Unit(position.x, position.y, 999, level_required, 0)), position);
+			}
+			else
+			{
+				income_ally += (cells_info[position.y][position.x] != 'O');
+				cells_info[position.y][position.x] = 'O';
+				update_gamestate();
+			}
+		}
 	}
 
 
@@ -1990,12 +2009,7 @@ public:
 					s1 += t.print() + ", ";
 				cerr << "CUTTING! " << s1 << "Score: " << score << " Cost:" << cost << endl;
 
-				for (auto& position : positions)
-				{
-					int level_required = get_cells_level_ally(position);
-					commands.push_back(Command(TRAIN, level_required, position));
-					refresh_gamestate_for_spawn(make_shared<Unit>(Unit(position.x, position.y, 999, level_required, 0)), position);
-				}
+				execute_cut(positions);
 				need_refresh = true;
 			}
 
