@@ -1107,10 +1107,7 @@ public:
 				if (get_cell_info(west_position) == 'O' && !get_cell(west_position).void_cell && west_position != position)
 					score += max(3.0 - get_cells_level_enemy(west_position), 0.0) * 10.0;
 
-				if (cuts[j][i] > 0)
-					score += cuts[j][i] * 5.0;
-				else
-					score -= 50.0;
+				score += cuts[j][i] * 5.0;
 
 				// assume we are on the offensive then, no need for towers
 				if (get_distance(position, hq_ally->p) > 13)
@@ -1135,6 +1132,16 @@ public:
 
 		cerr << "Best tower cell: " << max_position.print() << " score: " << max_score << endl;
 
+		bool close_to_enemy = false;
+		for (auto& position_ally : positions_ally)
+			for (auto& position_enemy : positions_enemy)
+				if (get_distance(position_ally, position_enemy) <= 2)
+				{
+					close_to_enemy = true;
+					goto can_spawn_tower;
+				}
+	can_spawn_tower:
+
 		if (!close_to_enemy)
 			return;
 
@@ -1147,28 +1154,47 @@ public:
 
 
 	// Training new units
-	double get_training_score(const shared_ptr<Unit>& unit, const Position& pos, const int allies_at_distance[width][height])
+	double get_training_score(const shared_ptr<Unit>& unit, const Position& pos, const int allies_at_distance[width][height], int level)
 	{
-		if (unit->level < get_cells_level_ally(pos) || cells_used_objective[pos.y][pos.x] || cells_used_movement[pos.y][pos.x] || cells_info[pos.y][pos.x] == 'O')
-			return -DBL_MAX;
-		else
+		if (level == 1)
 		{
-			int distance_to_hq_ally = get_distance(pos, hq_ally->p);
-			int distance_to_enemy_hq = get_distance(pos, hq_enemy->p);
+			if (unit->level < get_cells_level_ally(pos) || cells_used_objective[pos.y][pos.x] || cells_used_movement[pos.y][pos.x] || cells_info[pos.y][pos.x] == 'O')
+				return -DBL_MAX;
+			else
+			{
+				int distance_to_hq_ally = get_distance(pos, hq_ally->p);
+				int distance_to_enemy_hq = get_distance(pos, hq_enemy->p);
 
-			bool enemy_on_cell = get_cell(pos).is_occupied_by_enemy_unit();
-			bool enemy_building_on_cell = get_cell(pos).is_occupied_by_enemy_building();
-			bool enemy_territory = get_cell_info(pos) == 'X';
+				bool enemy_on_cell = get_cell(pos).is_occupied_by_enemy_unit();
+				bool enemy_building_on_cell = get_cell(pos).is_occupied_by_enemy_building();
+				bool enemy_territory = get_cell_info(pos) == 'X';
 
-			double score = 0.0;
+				double score = 0.0;
 
-			score += (turn <= 3) ? -distance_to_hq_ally * 10.0 : distance_to_hq_ally;
-			score += enemy_on_cell * 20.0;
-			score += enemy_building_on_cell * 20.0;
-			score += enemy_territory * 10.0;
-			score += close_to_enemy * allies_at_distance[pos.y][pos.x] * 10.0;
+				score += /*(turn <= 3) ? -distance_to_hq_ally * 10.0 : */distance_to_hq_ally;
+				score += enemy_on_cell * 20.0;
+				score += enemy_building_on_cell * 20.0;
+				score += enemy_territory * 10.0;
+				score += close_to_enemy * allies_at_distance[pos.y][pos.x] * 10.0;
 
-			return score;
+				return score;
+			}
+		}
+		else if (level == 2)
+		{
+			if (!get_cell(pos).is_occupied_by_enemy_unit_of_level(1))
+				return -DBL_MAX;
+			else
+				return get_score_enemy(pos);
+		}
+		else if (level == 3)
+		{
+			if (get_cells_level_ally(pos) != 3)
+				return -DBL_MAX;
+			else
+			{
+				return get_cell(pos).is_occupied_by_enemy_tower() * 10.0;
+			}
 		}
 	}
 	unordered_map<Position, double, HashPosition> find_training_positions(int level)
@@ -1180,9 +1206,7 @@ public:
 			{
 				Position pos = Position(i, j);
 
-				bool enemy_lower_level_or_none = (level >= 2) ? get_cell(pos).is_occupied_by_enemy_unit_of_level(level - 1) : true;
-
-				if (get_cells_level_ally(pos) > level || get_cells_used_movement(pos) || !enemy_lower_level_or_none)
+				if (get_cells_level_ally(pos) > level || get_cells_used_movement(pos))
 					continue;
 
 				bool attainable = false;
@@ -1198,12 +1222,6 @@ public:
 					positions_available.push_back(pos);
 			};
 
-		//string s1 = "can spawn to:";
-		//for (auto& p : positions_available)
-		//	s1 += p.print() + ", ";
-
-		//cerr << s1 << endl;
-
 		int allies_at_distance[width][height] = {};
 		for (auto& position : positions_ally)
 			for (int i = 0; i < width; i++)
@@ -1213,17 +1231,36 @@ public:
 
 		unordered_map<Position, double, HashPosition> positions_for_spawn;
 		for (auto& pos : positions_available)
-			if (level == 1)
-				positions_for_spawn[pos] = get_training_score(make_shared<Unit>(Unit(pos.x, pos.y, 999, level, 0)), pos, allies_at_distance);
-			else if (level == 2)
-				positions_for_spawn[pos] = get_score_enemy(pos);
+		{
+			double score = get_training_score(make_shared<Unit>(Unit(pos.x, pos.y, 999, level, 0)), pos, allies_at_distance, level);
+			if (score > -DBL_MAX)
+				positions_for_spawn[pos] = score;
+		}
 
 		return positions_for_spawn;
 	}
-	inline bool need_train_units(int level) { return nbr_units_ally_of_level(level) <= ((level == 1) ? 8 : 0); }
+	inline bool need_train_units(int level) 
+	{
+		if (level == 1)
+		{
+			return nbr_units_ally_of_level(1) <= 8;
+		}
+		else if (level == 2)
+		{
+			return nbr_units_ally_of_level(2) <= 0;
+		}
+		else if (level == 3)
+		{
+			for (auto& position : get_frontier_enemy(1))
+				if (get_cells_level_ally(position) < 3)
+					return false;
+
+			return nbr_units_ally_of_level(3) <= 0;
+		}
+	}
 	void train_units()
 	{
-		for (int level : {2, 1})
+		for (int level : {3, 2, 1})
 		{
 			Stopwatch s("Train units of level" + to_string(level));
 
@@ -1233,10 +1270,10 @@ public:
 
 				if (training_positions.size())
 				{
-					Position training_position = find_max_in_map(training_positions)->first;
-					refresh_gamestate_for_spawn(make_shared<Unit>(Unit(training_position.x, training_position.y, 999, level, 0)), training_position);
-					commands.push_back(Command(TRAIN, level, training_position));
-					cerr << "Training level" << level << " on " << training_position.print() << endl;
+					Position best_position = find_max_in_map(training_positions)->first;
+					refresh_gamestate_for_spawn(make_shared<Unit>(Unit(best_position.x, best_position.y, 999, level, 0)), best_position);
+					commands.push_back(Command(TRAIN, level, best_position));
+					cerr << "Training level" << level << " on " << best_position.print() << endl;
 				}
 				else
 					break;
@@ -1438,11 +1475,8 @@ public:
 			bool is_empty = (get_cell_info(pos) == '.');
 			bool cut_ally_distance_one = get_cuts_ally(pos) > 0 && distance <= 1;
 			bool cut_enemy_distance_one = get_cuts_enemy(pos) > 0 && distance <= 1;
-			bool at_equidistance = abs(get_distance(pos, hq_ally->p) - get_distance(pos, hq_enemy->p)) <= 3;
 
 			double score = 0.0;
-
-			// more weight if going into cluster of allies or where less weight?
 
 			score += enemy_on_cell * 25.0 / distance;
 			score += enemy_building_on_cell * 20.0 / distance;
@@ -1452,7 +1486,6 @@ public:
 
 			score += cut_ally_distance_one * get_cuts_ally(pos) * 10.0;
 			score += cut_enemy_distance_one * get_cuts_enemy(pos) * 8.0;
-			score += (turn <= 6) * at_equidistance * 50.0;
 
 			score -= distance_to_enemy_hq;
 			score -= distance;
