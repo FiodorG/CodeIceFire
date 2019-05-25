@@ -174,6 +174,49 @@ public:
 	}
 };
 auto find_max_in_map(unordered_map<Position, double, HashPosition> map) { return max_element(map.begin(), map.end(), [](const pair<Position, double>& p1, const pair<Position, double>& p2) { return p1.second < p2.second; }); }
+void print_vector_positions(const vector<Position>& positions, string tag)
+{
+	string str = tag + ": ";
+	for (auto& position : positions)
+		str += position.print() + ", ";
+	cerr << str << endl;
+}
+void print_hashmap_positions(const unordered_map<Position, double, HashPosition>& positions, string tag)
+{
+	string str = tag + ": ";
+	for (auto& position : positions)
+		str += position.first.print() + ": " + to_string(position.second) + ", ";
+	cerr << str << endl;
+}
+void print_hashmap_vector_positions(const unordered_map<Position, vector<Position>, HashPosition>& positions, string tag)
+{
+	cerr << tag + ": " << endl;
+	for (auto& position_vector : positions)
+	{
+		string str = position_vector.first.print() + ": ";
+		for (auto& position : position_vector.second)
+			str += position.print() + ", ";
+		cerr << str << endl;
+	}
+}
+void print_vector_vector(vector<vector<double>> vv)
+{
+	for (auto& row : vv)
+	{
+		for (auto& cell : row)
+			cerr << ((cell != -DBL_MAX) ? to_string(cell) : "#") << " ";
+		cerr << endl;
+	}
+}
+void print_vector_vector(int vv[][height])
+{
+	for (int i = 0; i < width; ++i)
+	{
+		for (int j = 0; j < width; ++j)
+			cerr << vv[i][j] << " ";
+		cerr << endl;
+	}
+}
 
 class Objective
 {
@@ -323,6 +366,7 @@ public:
 	unordered_map<Position, vector<Position>, HashPosition> adjacency_list_position_enemy;
 	unordered_map<Position, vector<Position>, HashPosition> adjacency_list_position_enemy_for_cut;
 	unordered_map<Position, vector<Position>, HashPosition> adjacency_list_position_ally;
+	unordered_map<Position, vector<Position>, HashPosition> adjacency_list_position_ally_for_cut;
 
 	vector<vector<Cell>> cells;
 	char cells_info[width][height]; // stores the chars representing the cell type
@@ -516,7 +560,7 @@ public:
 			}
 		return frontier;
 	}
-	inline vector<Position> get_frontier_spawn(int distance)
+	inline vector<Position> get_frontier_spawn_ally(int distance)
 	{
 		vector<Position> frontier;
 		for (int i = 0; i < width; i++)
@@ -529,6 +573,19 @@ public:
 		}
 		return frontier;
 	}
+	inline vector<Position> get_frontier_spawn_enemy(int distance)
+	{
+		vector<Position> frontier;
+		for (int i = 0; i < width; i++)
+			for (int j = 0; j < height; j++)
+				for (auto& position_enemy : positions_enemy)
+					if (get_distance(Position(i, j), position_enemy) == distance && (get_cell_info(Position(i, j)) == '.' || get_cell_info(Position(i, j)) == 'O' || get_cell_info(Position(i, j)) == 'o'))
+					{
+						frontier.push_back(Position(i, j));
+						break;
+					}
+		return frontier;
+	}
 
 
 	// Main functions
@@ -537,125 +594,8 @@ public:
 		Stopwatch s("Debug");
 
 		for_each(units_ally.begin(), units_ally.end(), [](shared_ptr<Unit>& u) { u->debug(); });
-		//for_each(units_enemy.begin(), units_enemy.end(), [](shared_ptr<Unit>& u) { u->debug(); });
-		//for_each(buildings_ally.begin(), buildings_ally.end(), [](shared_ptr<Building>& u) { u->debug(); });
-		//for_each(buildings_enemy.begin(), buildings_enemy.end(), [](shared_ptr<Building>& u) { u->debug(); });
 
-		//for (auto& row : cells)
-		//{
-		//	for (auto& cell : row)
-		//	{
-		//		if (cell.is_occupied())
-		//			cerr << "x ";
-		//		else
-		//			cerr << cell.position.x << "," << cell.position.y << " ";
-		//	}
-		//	cerr << endl;
-		//}
-
-		//for (auto& row : cells_level_ally)
-		//{
-		//	for (auto& cell : row)
-		//		cerr << cell;
-		//	cerr << endl;
-		//}
-
-		//for (auto& row : cells_used)
-		//{
-		//	for (auto& cell : row)
-		//		cerr << cell;
-		//	cerr << endl;
-		//} 
-
-		//cerr << "Level" << endl;
-		//for (auto& row : cells_level_ally)
-		//{
-		//	for (auto& cell : row)
-		//		cerr << cell;
-		//	cerr << endl;
-		//}
-
-		//cerr << "Enemy score" << endl;
-		//for (auto& row : score_enemy)
-		//{
-		//	for (auto& cell : row)
-		//		cerr << cell;
-
-		//	cerr << endl;
-		//}
-
-		// seed = -6736300506288822300
-		//cerr << get_distance(Position(5, 5), Position(6, 6)) << " vs " << Position::distance(Position(5, 5), Position(6, 6)) << endl;
-
-		//cerr << "My cuts:" << endl;
-		//MaxPriorityQueue<Position, double> cuts = find_cuts(false);
-
-		//while (!cuts.empty())
-		//{
-		//	Position cut = cuts.elements.top().second;
-		//	double gain = cuts.elements.top().first;
-		//	int level_required = get_cells_level_enemy(cut);
-		//	double cost = (double)(level_required * 10);
-		//	double score = gain - cost;
-
-		//	cerr << "Cut: " << cut.print() << ", gain " << gain << ", cost: " << cost << ", score: " << score << endl;
-
-		//	cuts.elements.pop();
-		//}
-
-		//vector<Position> valid_cut = { Position(0, 0), Position(0, 1) };
-		//cerr << "valid cut: " << is_valid_cut(valid_cut) << endl;
-
-		//vector<Position> invalid_cut = { Position(0, 0), Position(1, 1) };
-		//cerr << "invalid cut: " << is_valid_cut(invalid_cut) << endl;
-
-		//vector<Position> cut = { Position(3, 2), Position(3, 3) };
-		//cerr << "cut cost: " << get_cut_cost(cut) << endl;
-
-		/*vector<Position> tree_from_enemy_hq = graph_with_excluded_nodes(hq_enemy->p, cut);
-		cerr << "size graph: " << tree_from_enemy_hq.size() << endl;
-		cerr << "is there a cut: " << (tree_from_enemy_hq.size() != positions_enemy.size()) << endl;
-
-		Position cut_position = hq_enemy->p;
-		for (auto& position : positions_enemy)
-			if (
-				(find(tree_from_enemy_hq.begin(), tree_from_enemy_hq.end(), position) == tree_from_enemy_hq.end()) &&
-				(find(cut.begin(), cut.end(), position) == cut.end())
-				)
-			{
-				cut_position = position;
-				break;
-			}
-
-		cerr << "starting cut from: " << cut_position.print() << endl;
-		vector<Position> cut_graph = graph_with_excluded_nodes(cut_position, cut);
-		double cut_gain = score_graph(cut_graph, true);
-
-		cerr << "cut graph size: " << cut_graph.size() << endl;
-		cerr << "cut graph gain: " << cut_gain << endl;
-		cerr << "cut score: " << score_cut(cut) << endl;*/
-
-		//auto t = get_frontier_spawn(1);
-		//string s1 = "";
-		//for (auto& tt : t)
-		//	s1 += tt.print() + ", ";
-		//cerr << "Frontier:" << s1 << endl;
-
-		//cerr << "Adj list:" << endl;
-		//for (auto& t : adjacency_list_position_enemy_for_cut)
-		//{
-		//	string s2 = t.first.print() + ": ";
-		//	for (auto& tt : t.second)
-		//		s2 += tt.print() + ", ";
-		//	cerr << s2 << endl;
-		//}
-
-		//auto t = graph_with_excluded_nodes_including(hq_enemy->p, { Position(10, 9), Position(9, 9) });
-		//cerr << "size: " << t.size() << endl;
-		//string s1 = "";
-		//for (auto& t : t)
-		//	s1 += t.print() + ", ";
-		//cerr << s1 << endl;
+		//print_vector_vector(cells_level_ally);
 	}
 	void init() 
 	{
@@ -809,7 +749,7 @@ public:
 				buildings_ally.push_back(building);
 				cells[building->p.y][building->p.x].set_building(building);
 			}
-			else if (get_cell_info(building->p) == 'X')
+			else if (get_cell_info(building->p) == 'X' || get_cell_info(building->p) == 'x')
 			{
 				buildings_enemy.push_back(building);
 				cells[building->p.y][building->p.x].set_building(building);
@@ -1031,6 +971,42 @@ public:
 				adjacency_list_position_enemy_for_cut[position] = positions;
 			}
 	}
+	void compute_adjacency_list_ally_for_cut()
+	{
+		adjacency_list_position_ally_for_cut.clear();
+		for (int i = 0; i < width; ++i)
+			for (int j = 0; j < height; ++j)
+			{
+				vector<Position> positions;
+				Position position(i, j);
+
+				char info = get_cell_info(position);
+				if (info != 'O' && info != 'o' && info != '.')
+					continue;
+
+				Position north_position = position.north_position();
+				char north_info = get_cell_info(north_position);
+				if ((north_info == 'O' || north_info == 'o' || north_info == '.') && north_position != position)
+					positions.push_back(north_position);
+
+				Position south_position = position.south_position();
+				char south_info = get_cell_info(south_position);
+				if ((south_info == 'O' || south_info == 'o' || south_info == '.') && south_position != position)
+					positions.push_back(south_position);
+
+				Position east_position = position.east_position();
+				char east_info = get_cell_info(east_position);
+				if ((east_info == 'O' || east_info == 'o' || east_info == '.') && east_position != position)
+					positions.push_back(east_position);
+
+				Position west_position = position.west_position();
+				char west_info = get_cell_info(west_position);
+				if ((west_info == 'O' || west_info == 'o' || west_info == '.') && west_position != position)
+					positions.push_back(west_position);
+
+				adjacency_list_position_ally_for_cut[position] = positions;
+			}
+	}
 	void compute_adjacency_list_ally()
 	{
 		adjacency_list_position_ally.clear();
@@ -1070,111 +1046,68 @@ public:
 
 
 	// Buildings
-	void build_mines()
-	{
-		Stopwatch s("Build mines");
-
-		int nbr_mines = nbr_mines_ally();
-
-		if (nbr_mines >= 2)
-			return;
-
-		unordered_map<Position, double, HashPosition> position_for_mines;
-		for (int i = 0; i < width; i++)
-			for (int j = 0; j < height; j++)
-				if (cells_info[j][i] == 'O' && cells[j][i].mine && !cells[j][i].is_occupied_by_building())
-					position_for_mines[Position(i, j)] = -get_distance(hq_ally->p, Position(i, j));
-
-		while (position_for_mines.size())
-		{
-			auto max = max_element(position_for_mines.begin(), position_for_mines.end(), [](const pair<Position, double>& p1, const pair<Position, double>& p2) { return p1.second < p2.second; });
-			Position position_for_mine = max->first;
-
-			if (gold_ally >= 20 + nbr_mines * 4)
-			{
-				gold_ally -= 20 + nbr_mines * 4;
-				nbr_mines++;
-				commands.push_back(Command(BUILD, "MINE", position_for_mine));
-			}
-			else
-				return;
-
-			position_for_mines.erase(position_for_mine);
-		}
-	}
-	void build_towers_emergency()
-	{
-		static bool created_emergency_tower = false;
-
-		Position tower_location;
-		for (auto& position : positions_ally)
-			if (get_distance(position, hq_ally->p) == 1 && get_cell_info(position) == 'O' && get_cell(position).is_empty() && !get_cell(position).mine)
-				tower_location = position;
-
-		for (auto& enemy : units_enemy)
-			if (get_distance(enemy->p, hq_ally->p) <= 10 && !created_emergency_tower)
-			{
-				commands.push_back(Command(BUILD, "TOWER", tower_location));
-				created_emergency_tower = true;
-				return;
-			}
-	}
 	void build_towers()
 	{
 		Stopwatch s("Towers");
 
-		int n = nbr_towers_ally();
+		//int n = nbr_towers_ally();
 
-		if (n >= 3)
-			return;
+		//if (n >= 4)
+		//	return;
 
-		MaxPriorityQueue<Position, double> cuts = find_cuts(false);
-		double cuts_close[width][height] = {};
-		while (!cuts.empty())
+		compute_adjacency_list_ally_for_cut();
+		
+		double cuts[width][height] = {};
+		for (auto& position : get_frontier_spawn_enemy(1))
 		{
-			Position cut = cuts.elements.top().second;
-			double gain = cuts.elements.top().first;
+			auto pair = search({ position }, 4, false);
 
-			cerr << "My Cut: " << cut.print() << ", gain " << gain << endl;
+			if (pair.first > 0.0)
+			{
+				string s1 = "";
+				for (auto& p : pair.second)
+					s1 += p.print() + ", ";
+				cerr << "Chain against me: " << s1 << "Score: " << pair.first << " Cost:" << get_cut_cost(pair.second, false) << endl;
 
-			for (int i = 0; i < width; i++)
-				for (int j = 0; j < height; j++)
-					if (get_distance(Position(i, j), cut) <= 1 && get_cell_info(Position(i, j)) == 'O')
-						cuts_close[j][i] += gain;
-
-			cuts.elements.pop();
+				for (auto& position : pair.second)
+					for (int i = 0; i < width; i++)
+					for (int j = 0; j < height; j++)
+						if (get_distance(Position(i, j), position) <= 1 && get_cell_info(Position(i, j)) == 'O')
+							cuts[j][i] += pair.first;
+			}
 		}
 
 		double scores[width][height] = {};
-		for (int i = 0; i < width; i++)
-		for (int j = 0; j < height; j++)
+		for (auto& position : get_frontier_ally(3))
 		{
-			Position position = Position(i, j);
+			//Position position = Position(i, j);
+			int i = position.x;
+			int j = position.y;
 
 			if (get_cell_info(position) == 'O' && !get_cell(position).is_occupied() && !get_cell(position).get_mine())
 			{
-				double score = 0.0;
+				double score = max(3.0 - get_cells_level_enemy(position), 0.0) * 10.0;
 
 				Position north_position = position.north_position();
-				if (get_cell_info(north_position) == 'O' && !get_cell(north_position).void_cell && north_position != position && get_cell(north_position).is_occupied_by_ally_unit())
-					score += max(3.0 - get_cell(north_position).level_of_ally_unit(), 0.0) * (get_score_enemy(north_position) - get_score_ally(north_position));
+				if (get_cell_info(north_position) == 'O' && !get_cell(north_position).void_cell && north_position != position)
+					score += max(3.0 - get_cells_level_enemy(north_position), 0.0) * 10.0;
 
 				Position south_position = position.south_position();
-				if (get_cell_info(south_position) == 'O' && !get_cell(south_position).void_cell && south_position != position && get_cell(south_position).is_occupied_by_ally_unit())
-					score += max(3.0 - get_cell(south_position).level_of_ally_unit(), 0.0) * (get_score_enemy(south_position) - get_score_ally(south_position));
+				if (get_cell_info(south_position) == 'O' && !get_cell(south_position).void_cell && south_position != position)
+					score += max(3.0 - get_cells_level_enemy(south_position), 0.0) * 10.0;
 
 				Position east_position = position.east_position();
-				if (get_cell_info(east_position) == 'O' && !get_cell(east_position).void_cell && east_position != position && get_cell(east_position).is_occupied_by_ally_unit())
-					score += max(3.0 - get_cell(east_position).level_of_ally_unit(), 0.0) * (get_score_enemy(east_position) - get_score_ally(east_position));
+				if (get_cell_info(east_position) == 'O' && !get_cell(east_position).void_cell && east_position != position)
+					score += max(3.0 - get_cells_level_enemy(east_position), 0.0) * 10.0;
 
 				Position west_position = position.west_position();
-				if (get_cell_info(west_position) == 'O' && !get_cell(west_position).void_cell && west_position != position && get_cell(west_position).is_occupied_by_ally_unit())
-					score += max(3.0 - get_cell(west_position).level_of_ally_unit(), 0.0) * (get_score_enemy(west_position) - get_score_ally(west_position));
+				if (get_cell_info(west_position) == 'O' && !get_cell(west_position).void_cell && west_position != position)
+					score += max(3.0 - get_cells_level_enemy(west_position), 0.0) * 10.0;
 
-				score += cuts_close[j][i];
+				score += cuts[j][i] * 5.0;
 
 				// assume we are on the offensive then, no need for towers
-				if (get_distance(position, hq_ally->p) >= 12)
+				if (get_distance(position, hq_ally->p) > 13)
 					score = 0.0;
 
 				scores[j][i] = score;
@@ -1182,15 +1115,6 @@ public:
 			else
 				scores[j][i] = -DBL_MAX;
 		}
-
-		//cerr << "Cuts map:" << endl;
-		//for (auto& row : scores)
-		//{
-		//	for (auto& cell : row)
-		//		cerr << ((cell == -DBL_MAX)? "#" : to_string(cell)) << " ";
-
-		//	cerr << endl;
-		//}
 
 		Position max_position = hq_ally->p;
 		double max_score = -DBL_MAX;
@@ -1205,12 +1129,25 @@ public:
 
 		cerr << "Best tower cell: " << max_position.print() << " score: " << max_score << endl;
 
-		if (gold_ally >= tower_cost && max_score >= tower_cost)
+		bool close_to_enemy = false;
+		for (auto& position_ally : positions_ally)
+			for (auto& position_enemy : positions_enemy)
+				if (get_distance(position_ally, position_enemy) <= 2)
+				{
+					close_to_enemy = true;
+					goto can_spawn_tower;
+				}
+		can_spawn_tower:
+		if (!close_to_enemy)
+			return;
+
+		if (gold_ally >= tower_cost && max_score > 60.0)
 		{
 			commands.push_back(Command(BUILD, "TOWER", max_position));
 			refresh_gamestate_for_building(make_shared<Building>(Building(max_position.x, max_position.y, TOWER, 0)));
 		}
 	}
+
 
 	// Training new units
 	double get_training_score(const shared_ptr<Unit>& unit, const Position& pos)
@@ -1282,7 +1219,7 @@ public:
 
 		return positions_for_spawn;
 	}
-	inline bool need_train_units(int level) { return nbr_units_ally_of_level(level) <= ((level == 1) ? 8 : 4); }
+	inline bool need_train_units(int level) { return nbr_units_ally_of_level(level) <= ((level == 1) ? 8 : 0); }
 	void train_units()
 	{
 		for (int level : {2, 1})
@@ -1498,7 +1435,8 @@ public:
 			bool enemy_territory = get_cell_info(pos) == 'X';
 			bool enemy_territory_inactive = get_cell_info(pos) == 'x';
 			bool is_empty = (get_cell_info(pos) == '.');
-			bool cut_at_distance_one = get_cuts_ally(pos) > 0 && distance == 1;
+			bool cut_ally_distance_one = get_cuts_ally(pos) > 0 && distance <= 1;
+			bool cut_enemy_distance_one = get_cuts_enemy(pos) > 0 && distance <= 1;
 
 			double score = 0.0;
 
@@ -1510,7 +1448,8 @@ public:
 			score += enemy_territory_inactive * 12.5 / distance;
 			score += is_empty * 10.0 / distance;
 
-			score += cut_at_distance_one * 100.0;
+			score += cut_ally_distance_one * get_cuts_ally(pos) * 10.0;
+			score += cut_enemy_distance_one * get_cuts_enemy(pos) * 8.0;
 
 			score -= distance_to_enemy_hq;
 			score -= distance;
@@ -1784,7 +1723,7 @@ public:
 	{
 		Stopwatch s("Chainkills");
 
-		unordered_map<Position, double, HashPosition> chainkills = dijkstra_chainkill_all_costs(hq_enemy->p, false);
+		unordered_map<Position, double, HashPosition> chainkills = dijkstra_chainkill_all_costs(hq_enemy->p);
 
 		if (!chainkills.size())
 			return;
@@ -1819,7 +1758,7 @@ public:
 
 			//cerr << s1 << endl;
 
-			double score = get_cut_cost(chainkill_path);
+			double score = get_cut_cost(chainkill_path, true);
 
 			if (score >= gold_ally)
 				return;
@@ -1830,7 +1769,7 @@ public:
 			cerr << "WILL CHAINKILL!" << endl;
 		}
 	}
-	unordered_map<Position, double, HashPosition> dijkstra_chainkill_all_costs(const Position& source, bool debug)
+	unordered_map<Position, double, HashPosition> dijkstra_chainkill_all_costs(const Position& source)
 	{
 		MinPriorityQueue<Position, double> frontier;
 		frontier.put(source, 0.0);
@@ -1888,7 +1827,7 @@ public:
 
 		return reconstruct_path(source, target, came_from);
 	}
-	inline double get_cut_cost(const vector<Position> cut)
+	inline double get_cut_cost(const vector<Position> cut, bool my_pov)
 	{
 		double cost = 0.0;
 
@@ -1909,9 +1848,17 @@ public:
 		//		just_captured_tower = false;
 		//}
 
-		for (auto& position : cut)
-			cost += get_cells_level_ally(position) * 10.0;
-
+		if (my_pov)
+		{
+			for (auto& position : cut)
+				cost += get_cells_level_ally(position) * 10.0;
+		}
+		else
+		{
+			for (auto& position : cut)
+				cost += get_cells_level_enemy(position) * 10.0; 
+		}
+		
 		return cost;
 	}
 
@@ -1970,9 +1917,9 @@ public:
 				compute_adjacency_list_enemy_for_cut();
 
 				cuts.clear();
-				for (auto& position : get_frontier_spawn(1))
+				for (auto& position : get_frontier_spawn_ally(1))
 				{
-					auto pair = search({ position }, 4);
+					auto pair = search({ position }, 4, true);
 
 					if (pair.first > 0.0)
 						cuts.emplace(make_shared<vector<Position>>(pair.second), pair.first);
@@ -1987,7 +1934,7 @@ public:
 			auto best_cut = max_element(cuts.begin(), cuts.end(), [](const pair<shared_ptr<vector<Position>>, double>& p1, const pair<shared_ptr<vector<Position>>, double>& p2) { return p1.second < p2.second; });
 			vector<Position> positions = *(best_cut->first);
 			double score = best_cut->second;
-			double cost = get_cut_cost(positions);
+			double cost = get_cut_cost(positions, true);
 
 			//for (auto& t : cuts)
 			//{
@@ -2019,20 +1966,22 @@ public:
 			cuts.erase(best_cut);
 		}
 	}
-	pair<double, vector<Position>> search(const vector<Position>& forbidden, int depth)
+	pair<double, vector<Position>> search(const vector<Position>& forbidden, int depth, bool my_pov)
 	{
+		auto& adj_list = my_pov ? adjacency_list_position_enemy_for_cut : adjacency_list_position_ally_for_cut;
+
 		if (depth > 0)
 		{
-			double max_score = score_cut(forbidden);
+			double max_score = score_cut(forbidden, my_pov);
 			vector<Position> max_cut = forbidden;
 
-			for (auto& child : adjacency_list_position_enemy_for_cut[forbidden.back()])
+			for (auto& child : adj_list[forbidden.back()])
 			if(find(forbidden.begin(), forbidden.end(), child) == forbidden.end())
 			{
 				vector<Position> new_forbidden = forbidden;
 				new_forbidden.push_back(child);
 
-				auto pair = search(new_forbidden, depth - 1);
+				auto pair = search(new_forbidden, depth - 1, my_pov);
 
 				if (pair.first > max_score)
 				{
@@ -2044,32 +1993,33 @@ public:
 			return make_pair(max_score, max_cut);
 		}
 		else
-			return make_pair(score_cut(forbidden), forbidden);
+			return make_pair(score_cut(forbidden, my_pov), forbidden);
 	}
-	double score_cut(const vector<Position>& forbidden)
+	double score_cut(const vector<Position>& forbidden, bool my_pov)
 	{
 		if (!is_valid_cut(forbidden))
 			return -DBL_MAX;
 
-		double cut_cost = get_cut_cost(forbidden);
+		double cut_cost = get_cut_cost(forbidden, my_pov);
 
-		if (cut_cost > gold_ally)
+		if (cut_cost > (my_pov ? gold_ally : gold_enemy + income_enemy))
 			return -DBL_MAX;
 
-		vector<Position> tree_from_enemy_hq = graph_with_excluded_nodes_including(hq_enemy->p, forbidden);
+		vector<Position> tree_from_hq = graph_with_excluded_nodes_including(my_pov ? hq_enemy->p : hq_ally->p, forbidden, my_pov);
 
-		if (tree_from_enemy_hq.size() != positions_enemy.size())
+		vector<Position>& positions = (my_pov ? positions_enemy : positions_ally);
+		if (tree_from_hq.size() != positions.size())
 		{
 			double cut_gain = 0.0;
-			unordered_set<Position, HashPosition> positions_to_check(positions_enemy.begin(), positions_enemy.end());
+			unordered_set<Position, HashPosition> positions_to_check(positions.begin(), positions.end());
 			while (positions_to_check.size())
 			{
 				Position position = *(positions_to_check.begin());
 				positions_to_check.erase(position);
 
-				if (find(tree_from_enemy_hq.begin(), tree_from_enemy_hq.end(), position) == tree_from_enemy_hq.end())
+				if (find(tree_from_hq.begin(), tree_from_hq.end(), position) == tree_from_hq.end())
 				{
-					vector<Position> cut_graph = graph_with_excluded_nodes(position, forbidden);
+					vector<Position> cut_graph = graph_with_excluded_nodes(position, forbidden, my_pov);
 					cut_gain += score_graph(cut_graph);
 
 					//string s0 = "cut graph, gain" + to_string(cut_gain) + ", ";
@@ -2089,21 +2039,23 @@ public:
 			//	s1 += t.print() + ", ";
 			//cerr << s1 << " gain: " << cut_gain << " cost: " << cut_cost << " score: " << cut_gain - cut_cost << endl;
 			//string s2 = "Tree from enemy HQ";
-			//for (auto& t : tree_from_enemy_hq)
+			//for (auto& t : tree_from_hq)
 			//	s2 += t.print() + ", ";
-			//cerr << "size: " << tree_from_enemy_hq.size() << " total: " << positions_enemy.size() << " " << s2 << endl;
-			//string s1 = "";
+			//cerr << "size: " << tree_from_hq.size() << " total: " << positions_ally.size() << " " << s2 << endl;
+			//string s3 = "";
 			//for (auto& t : forbidden)
-			//	s1 += t.print() + ", ";
-			//cerr << s1 << " gain: " << cut_gain << " cost: " << cut_cost << " score: " << cut_gain - cut_cost << endl;
+			//	s3 += t.print() + ", ";
+			//cerr << s3 << " gain: " << cut_gain << " cost: " << cut_cost << " score: " << cut_gain - cut_cost << endl;
 
 			return cut_gain - cut_cost;
 		}
 		else
 			return -DBL_MAX;
 	}
-	vector<Position> graph_with_excluded_nodes(const Position& source, const vector<Position>& forbidden)
+	vector<Position> graph_with_excluded_nodes(const Position& source, const vector<Position>& forbidden, bool my_pov)
 	{
+		auto& adj_list = my_pov ? adjacency_list_position_enemy : adjacency_list_position_ally;
+
 		bool visited[width][height] = {};
 		visited[source.y][source.x] = true;
 
@@ -2119,7 +2071,7 @@ public:
 			Position current = frontier.front();
 			frontier.pop();
 
-			for (const Position& next : adjacency_list_position_enemy[current])
+			for (const Position& next : adj_list[current])
 			{
 				if (!visited[next.y][next.x] && (find(forbidden.begin(), forbidden.end(), next) == forbidden.end()))
 				{
@@ -2132,8 +2084,10 @@ public:
 
 		return graph;
 	}
-	vector<Position> graph_with_excluded_nodes_including(const Position& source, const vector<Position>& forbidden)
+	vector<Position> graph_with_excluded_nodes_including(const Position& source, const vector<Position>& forbidden, bool my_pov)
 	{
+		auto& adj_list = my_pov ? adjacency_list_position_enemy : adjacency_list_position_ally;
+
 		bool visited[width][height] = {};
 		visited[source.y][source.x] = true;
 
@@ -2149,7 +2103,7 @@ public:
 			Position current = frontier.front();
 			frontier.pop();
 
-			for (const Position& next : adjacency_list_position_enemy[current])
+			for (const Position& next : adj_list[current])
 			{
 				if (!visited[next.y][next.x])
 				{
@@ -2232,8 +2186,7 @@ int main()
 			g.attempt_chainkill();
 			g.search_cuts();
 			
-			//g.build_towers_emergency();
-			//g.build_towers();
+			g.build_towers();
 
 			g.train_units_on_cuts();
 			g.train_units();
