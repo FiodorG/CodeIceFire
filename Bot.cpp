@@ -152,19 +152,20 @@ public:
 	Position(int x, int y) : x(x), y(y) {}
 	Position(const Position& pos) : x(pos.x), y(pos.y) {}
 
-	bool operator==(const Position& rhs) { return x == rhs.x && y == rhs.y; } const
-	bool operator!=(const Position& rhs) { return x != rhs.x || y != rhs.y; } const
+	Position& operator= (const Position&) = default;
 
-	inline static int distance(const Position& lhs, const Position& rhs) { return abs(lhs.x - rhs.x) + abs(lhs.y - rhs.y); }
-	inline Position north_position() { return (this->y > 0)? Position(this->x, this->y - 1) : Position(*this); }
-	inline Position south_position() { return (this->y < height - 1)? Position(this->x, this->y + 1) : Position(*this); }
-	inline Position east_position() { return (this->x < width - 1) ? Position(this->x + 1, this->y) : Position(*this); }
-	inline Position west_position() { return (this->x > 0) ? Position(this->x - 1, this->y) : Position(*this); }
-	inline void debug() { cerr << "(" << x << "," << y << ")" << endl; }
-	inline string print() const { return "(" + to_string(x) + "," + to_string(y) + ")"; }
+	static int distance(const Position& lhs, const Position& rhs) { return abs(lhs.x - rhs.x) + abs(lhs.y - rhs.y); }
+	Position north_position() { return (this->y > 0)? Position(this->x, this->y - 1) : Position(*this); }
+	Position south_position() { return (this->y < height - 1)? Position(this->x, this->y + 1) : Position(*this); }
+	Position east_position() { return (this->x < width - 1) ? Position(this->x + 1, this->y) : Position(*this); }
+	Position west_position() { return (this->x > 0) ? Position(this->x - 1, this->y) : Position(*this); }
+	void debug() { cerr << "(" << x << "," << y << ")" << endl; }
+	string print() const { return "(" + to_string(x) + "," + to_string(y) + ")"; }
 };
 
 bool operator==(const Position& lhs, const Position& rhs) { return lhs.x == rhs.x && lhs.y == rhs.y; }
+bool operator!=(const Position& lhs, const Position& rhs) { return ! (lhs == rhs); }
+
 class HashPosition
 {
 public:
@@ -234,12 +235,12 @@ class Command
 public:
 
 	CommandType t;
+	int idOrLevel;  
 	Position p;
-	int idOrLevel;
 	string building;
 
 	Command(CommandType t, int idOrLevel, const Position &p) : t(t), idOrLevel(idOrLevel), p(p) {}
-	Command(CommandType t, string building, const Position &p) : t(t), idOrLevel(-1), building(building), p(p) {}
+	Command(CommandType t, string building, const Position &p) : t(t), idOrLevel(-1), p(p), building(building) {}
 
 	void print() 
 	{
@@ -260,7 +261,7 @@ public:
 	Position p;
 	Objective objective;
 
-	Unit(int x, int y, int id, int level, int owner) : p(x, y), id(id), level(level), owner(owner), objective(Objective(-DBL_MAX)) {}
+	Unit(int x, int y, int id, int level, int owner) : id(id), owner(owner), level(level), p(x, y), objective(Objective(-DBL_MAX)) {}
 
 	inline void debug() 
 	{
@@ -305,8 +306,8 @@ public:
 	int owner;
 	bool void_cell;
 
-	Cell() : owner(0), mine(false), void_cell(false) {}
-	Cell(int x, int y) : owner(0), mine(false), void_cell(false) { this->position = Position(x, y); }
+	Cell() : mine(false), owner(0), void_cell(false) {}
+	Cell(int x, int y) : position (x, y), mine(false), owner(0), void_cell(false) {};
 
 	inline void set_unit(shared_ptr<Unit> unit) { this->unit = unit; }
 	inline void set_building(shared_ptr<Building> building) { this->building = building; }
@@ -486,12 +487,16 @@ public:
 		for (auto& b : buildings)
 			if (b->isHQ() && b->isOwned())
 				return b;
+
+		return nullptr; // ??? WTF
 	}
 	inline shared_ptr<Building> getOpponentHQ()
 	{
 		for (auto &b : buildings)
 			if (b->isHQ() && !b->isOwned())
 				return b;
+
+		return nullptr; // ??? WTF		
 	}
 	inline bool is_position_attainable(const Position& position)
 	{
@@ -637,7 +642,7 @@ public:
 		{
 			string line;
 			cin >> line; cin.ignore();
-			for (int j = 0; j < line.size(); j++)
+			for (std::size_t j = 0; j < line.size(); j++)
 				cells_info[i][j] = line[j];
 			cerr << line << endl;
 		}
@@ -1163,7 +1168,7 @@ public:
 			else
 			{
 				int distance_to_hq_ally = get_distance(pos, hq_ally->p);
-				int distance_to_enemy_hq = get_distance(pos, hq_enemy->p);
+				int distance_to_enemy_hq = get_distance(pos, hq_enemy->p); (void) distance_to_enemy_hq;
 
 				bool enemy_on_cell = get_cell(pos).is_occupied_by_enemy_unit();
 				bool enemy_building_on_cell = get_cell(pos).is_occupied_by_enemy_building();
@@ -1196,6 +1201,8 @@ public:
 				return get_cell(pos).is_occupied_by_enemy_tower() * 10.0;
 			}
 		}
+
+		return 0.0; // WTF ???
 	}
 	unordered_map<Position, double, HashPosition> find_training_positions(int level)
 	{
@@ -1257,6 +1264,8 @@ public:
 
 			return nbr_units_ally_of_level(3) <= 0;
 		}
+
+		return false; // WTF ???
 	}
 	void train_units()
 	{
@@ -1365,6 +1374,9 @@ public:
 		// Too low level to move to position
 		//if (unit->level < get_cells_level(next))
 		//	score += 1000.0;
+		(void) unit;
+		(void) target;
+		(void) current;
 
 		if (get_cell_info(next) == '#')
 			score += 1000.0;
@@ -1377,6 +1389,8 @@ public:
 	}
 	vector<Position> dijkstra(const shared_ptr<Unit>& unit, const Position& target, bool debug)
 	{
+		(void) debug;
+		
 		unordered_map<Position, Position, HashPosition> came_from;
 		came_from[unit->p] = unit->p;
 
@@ -1464,7 +1478,7 @@ public:
 			return -DBL_MAX;
 		else
 		{
-			int distance_to_hq_ally = get_distance(pos, hq_ally->p);
+			int distance_to_hq_ally = get_distance(pos, hq_ally->p); (void) distance_to_hq_ally;
 			int distance_to_enemy_hq = get_distance(pos, hq_enemy->p);
 			int distance = get_distance(unit->p, pos);
 
@@ -2249,3 +2263,4 @@ int main()
 
 	return 0;
 }
+
