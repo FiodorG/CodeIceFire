@@ -378,10 +378,11 @@ public:
 	int gold_ally, income_ally;
 	int gold_enemy, income_enemy;
 
-	double score_ally[width][height];
 	double score_enemy[width][height];
 	double cuts_ally[width][height];
 	double cuts_enemy[width][height];
+	int enemy_towers_around[width][height];
+	int ally_towers_around[width][height];
 
 	bool close_to_enemy;
 
@@ -394,8 +395,9 @@ public:
 	inline char get_cell_info(const Position& position) { return cells_info[position.y][position.x]; }
 	inline double get_cuts_ally(const Position& position) { return cuts_ally[position.y][position.x]; }
 	inline double get_cuts_enemy(const Position& position) { return cuts_enemy[position.y][position.x]; }
+	inline int get_enemy_towers_around(const Position& position) { return enemy_towers_around[position.y][position.x]; }
+	inline int get_ally_towers_around(const Position& position) { return ally_towers_around[position.y][position.x]; }
 	inline double get_score_enemy(const Position& position) { return score_enemy[position.y][position.x]; }
-	inline double get_score_ally(const Position& position) { return score_ally[position.y][position.x]; }
 	inline vector<Position>& get_adjacency_list(const Position& position) { return adjacency_list.at(position); }
 	inline vector<Position>& get_adjacency_list_position_enemy(const Position& position) { return adjacency_list_position_enemy.at(position); }
 
@@ -764,6 +766,7 @@ public:
 			}
 		}
 
+
 		// Mines
 		for (auto& mine : mine_spots)
 			cells[mine.y][mine.x].set_mine();
@@ -898,7 +901,7 @@ public:
 		// Scores
 		for (int i = 0; i < width; i++)
 			for (int j = 0; j < height; j++)
-				score_ally[j][i] = score_enemy[j][i] = 0;
+				score_enemy[j][i] = 0;
 
 		for (auto& enemy : units_enemy)
 			for (int i = 0; i < width; i++)
@@ -906,11 +909,24 @@ public:
 					if (get_distance(enemy->p, Position(i, j)) <= 3 && get_cell_info(enemy->p) == 'X')
 						score_enemy[j][i] += enemy->level;
 
-		for (auto& ally : units_ally)
-			for (int i = 0; i < width; i++)
-				for (int j = 0; j < height; j++)
-					if (get_distance(ally->p, Position(i, j)) <= 3)
-						score_ally[j][i] += ally->level;
+
+		// Towers around
+		for (int i = 0; i < width; i++)
+			for (int j = 0; j < height; j++)
+				enemy_towers_around[j][i] = ally_towers_around[j][i] = 0;
+
+
+		for (int i = 0; i < width; i++)
+			for (int j = 0; j < height; j++)
+			{
+				for (auto& building : buildings_enemy)
+					if (get_distance(building->p, Position(i, j)) <= 1)
+						enemy_towers_around[j][i] += 1;
+
+				for (auto& building : buildings_ally)
+					if (get_distance(building->p, Position(i, j)) <= 1)
+						ally_towers_around[j][i] += 1;
+			}
 	}
 	void compute_adjacency_list_enemy()
 	{
@@ -953,27 +969,27 @@ public:
 				Position position(i, j);
 
 				char info = get_cell_info(position);
-				if (info != 'X' && info != 'x' && info != '.')
+				if (info != 'X' && info != 'x' && info != '.' && info != 'o')
 					continue;
 
 				Position north_position = position.north_position();
 				char north_info = get_cell_info(north_position);
-				if ((north_info == 'X' || north_info == 'x' || north_info == '.') && north_position != position)
+				if ((north_info == 'X' || north_info == 'x' || north_info == '.' || north_info == 'o') && north_position != position)
 					positions.push_back(north_position);
 
 				Position south_position = position.south_position();
 				char south_info = get_cell_info(south_position);
-				if ((south_info == 'X' || south_info == 'x' || south_info == '.') && south_position != position)
+				if ((south_info == 'X' || south_info == 'x' || south_info == '.' || south_info == 'o') && south_position != position)
 					positions.push_back(south_position);
 
 				Position east_position = position.east_position();
 				char east_info = get_cell_info(east_position);
-				if ((east_info == 'X' || east_info == 'x' || east_info == '.') && east_position != position)
+				if ((east_info == 'X' || east_info == 'x' || east_info == '.' || east_info == 'o') && east_position != position)
 					positions.push_back(east_position);
 
 				Position west_position = position.west_position();
 				char west_info = get_cell_info(west_position);
-				if ((west_info == 'X' || west_info == 'x' || west_info == '.') && west_position != position)
+				if ((west_info == 'X' || west_info == 'x' || west_info == '.' || west_info == 'o') && west_position != position)
 					positions.push_back(west_position);
 
 				adjacency_list_position_enemy_for_cut[position] = positions;
@@ -989,27 +1005,27 @@ public:
 				Position position(i, j);
 
 				char info = get_cell_info(position);
-				if (info != 'O' && info != 'o' && info != '.')
+				if (info != 'O' && info != 'o' && info != '.' && info != 'x')
 					continue;
 
 				Position north_position = position.north_position();
 				char north_info = get_cell_info(north_position);
-				if ((north_info == 'O' || north_info == 'o' || north_info == '.') && north_position != position)
+				if ((north_info == 'O' || north_info == 'o' || north_info == '.' || north_info == 'x') && north_position != position)
 					positions.push_back(north_position);
 
 				Position south_position = position.south_position();
 				char south_info = get_cell_info(south_position);
-				if ((south_info == 'O' || south_info == 'o' || south_info == '.') && south_position != position)
+				if ((south_info == 'O' || south_info == 'o' || south_info == '.' || south_info == 'x') && south_position != position)
 					positions.push_back(south_position);
 
 				Position east_position = position.east_position();
 				char east_info = get_cell_info(east_position);
-				if ((east_info == 'O' || east_info == 'o' || east_info == '.') && east_position != position)
+				if ((east_info == 'O' || east_info == 'o' || east_info == '.' || east_info == 'x') && east_position != position)
 					positions.push_back(east_position);
 
 				Position west_position = position.west_position();
 				char west_info = get_cell_info(west_position);
-				if ((west_info == 'O' || west_info == 'o' || west_info == '.') && west_position != position)
+				if ((west_info == 'O' || west_info == 'o' || west_info == '.' || west_info == 'x') && west_position != position)
 					positions.push_back(west_position);
 
 				adjacency_list_position_ally_for_cut[position] = positions;
@@ -1083,7 +1099,6 @@ public:
 		double scores[width][height] = {};
 		for (auto& position : get_frontier_ally(3))
 		{
-			//Position position = Position(i, j);
 			int i = position.x;
 			int j = position.y;
 
@@ -1189,7 +1204,7 @@ public:
 		}
 		else if (level == 3)
 		{
-			if (get_cells_level_ally(pos) != 3)
+			if (get_cells_level_ally(pos) != 3 || get_cell_info(pos) != 'X')
 				return -DBL_MAX;
 			else
 			{
@@ -1460,7 +1475,6 @@ public:
 	double get_score(const shared_ptr<Unit>& unit, const Position& pos)
 	{
 		if (unit->level < get_cells_level_ally(pos) || cells_used_objective[pos.y][pos.x] || cells_used_movement[pos.y][pos.x] || cells_info[pos.y][pos.x] == 'O')
-			// not objective if not enough level, cell is already used, cell is already owned
 			return -DBL_MAX;
 		else
 		{
@@ -1478,8 +1492,17 @@ public:
 
 			double score = 0.0;
 
-			score += enemy_on_cell * 25.0 / distance;
-			score += enemy_building_on_cell * 20.0 / distance;
+			if (unit->level <= 2)
+			{
+				score += enemy_on_cell * 25.0 / distance;
+				score += enemy_building_on_cell * 20.0 / distance;
+			}
+			else
+			{
+				score += enemy_on_cell * 20.0 / distance;
+				score += enemy_building_on_cell * 25.0 / distance;
+			}
+			
 			score += enemy_territory * 15.0 / distance;
 			score += enemy_territory_inactive * 12.5 / distance;
 			score += is_empty * 10.0 / distance;
@@ -1865,46 +1888,56 @@ public:
 	{
 		double cost = 0.0;
 
-		//bool just_captured_tower = false;
-		//for (auto& position : cut)
-		//{
-		//	if (just_captured_tower && !get_cell(position).is_occupied_by_enemy_tower())
-		//	{
-		//		cost += (get_cell(position).is)
-		//		just_captured_tower = false;
-		//	}
-		//	else
-		//		cost += get_cells_level_ally(position) * 10.0;
-
-		//	if (get_cell(position).is_occupied_by_enemy_tower())
-		//		just_captured_tower = true;
-		//	else
-		//		just_captured_tower = false;
-		//}
-
 		if (my_pov)
 		{
+			bool just_captured_tower = false;
 			for (auto& position : cut)
 				if (get_cell_info(position) != 'o')
-					cost += get_cells_level_ally(position) * 10.0;
+				{
+					if (just_captured_tower && get_enemy_towers_around(position) == 1)
+						cost += get_cell(position).is_occupied_by_enemy_unit() ? min(get_cell(position).level_of_enemy_unit() + 1, 3) * 10.0 : 10.0;
+					else
+						cost += get_cells_level_ally(position) * 10.0;
+
+					just_captured_tower = get_cell(position).is_occupied_by_enemy_tower();
+				}
+				else
+					just_captured_tower = false;
 		}
 		else
 		{
+			bool just_captured_tower = false;
 			for (auto& position : cut)
 				if (get_cell_info(position) != 'x')
-					cost += get_cells_level_enemy(position) * 10.0; 
+				{
+					if (just_captured_tower && get_ally_towers_around(position) == 1)
+						cost += get_cell(position).is_occupied_by_ally_unit() ? min(get_cell(position).level_of_ally_unit() + 1, 3) * 10.0 : 10.0;
+					else
+						cost += get_cells_level_enemy(position) * 10.0;
+
+					just_captured_tower = get_cell(position).is_occupied_by_ally_tower();
+				}
+				else
+					just_captured_tower = false;
 		}
 		
 		return cost;
 	}
 	void execute_cut(const vector<Position>& cut)
 	{
+		bool just_captured_tower = false;
 		for (auto& position : cut)
 		{
-			int level_required = get_cells_level_ally(position);
-
-			if (get_cell_info(position) != 'o')
+			if (get_cell_info(position) != 'o' && get_cell_info(position) != 'O')
 			{
+				int level_required;
+
+				if (just_captured_tower && get_enemy_towers_around(position) == 1)
+					level_required = get_cell(position).is_occupied_by_enemy_unit() ? min(get_cell(position).level_of_enemy_unit() + 1, 3) : 1;
+				else
+					level_required = get_cells_level_ally(position);
+
+				just_captured_tower = get_cell(position).is_occupied_by_enemy_tower();
 				commands.push_back(Command(TRAIN, level_required, position));
 				refresh_gamestate_for_spawn(make_shared<Unit>(Unit(position.x, position.y, 999, level_required, 0)), position);
 			}
@@ -1980,24 +2013,24 @@ public:
 						cuts.emplace(make_shared<vector<Position>>(pair.second), pair.first);
 				}
 
-				if (cuts.empty())
-					return;
-
 				need_refresh = false;
 			}
 			
+			if (cuts.empty())
+				return;
+
 			auto best_cut = max_element(cuts.begin(), cuts.end(), [](const pair<shared_ptr<vector<Position>>, double>& p1, const pair<shared_ptr<vector<Position>>, double>& p2) { return p1.second < p2.second; });
 			vector<Position> positions = *(best_cut->first);
 			double score = best_cut->second;
 			double cost = get_cut_cost(positions, true);
 
-			//for (auto& t : cuts)
-			//{
-			//	string s1 = "";
-			//	for (auto& p : *(t.first))
-			//		s1 += p.print() + ", ";
-			//	cerr << "Chain: " << s1 << "Score: " << t.second << " Cost:" << get_cut_cost(*(t.first)) << endl;
-			//}
+			for (auto& t : cuts)
+			{
+				string s1 = "";
+				for (auto& p : *(t.first))
+					s1 += p.print() + ", ";
+				cerr << "Chain: " << s1 << "Score: " << t.second << " Cost:" << get_cut_cost(*(t.first), true) << endl;
+			}
 
 			if (score < 0.0)
 				return;
@@ -2067,7 +2100,10 @@ public:
 				Position position = *(positions_to_check.begin());
 				positions_to_check.erase(position);
 
-				if (find(tree_from_hq.begin(), tree_from_hq.end(), position) == tree_from_hq.end())
+				if (
+					find(tree_from_hq.begin(), tree_from_hq.end(), position) == tree_from_hq.end() && 
+					find(forbidden.begin(), forbidden.end(), position) == forbidden.end()
+					)
 				{
 					vector<Position> cut_graph = graph_with_excluded_nodes(position, forbidden, my_pov);
 					cut_gain += score_graph(cut_graph);
