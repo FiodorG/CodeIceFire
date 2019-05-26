@@ -7,6 +7,7 @@
 #include <unordered_map>
 #include <algorithm>
 #include <queue>
+#include <iterator>
 #include <functional>
 #include <utility>
 #include <array>
@@ -21,6 +22,9 @@
 
 using namespace std;
 
+#define GA_TURNS 6
+#define GA_POPULATION_SIZE 10
+
 const int height = 12;
 const int width = 12;
 const int tower_cost = 15;
@@ -30,6 +34,8 @@ const int level_3_cost = 30;
 const int level_1_upkeep = 1;
 const int level_2_upkeep = 4;
 const int level_3_upkeep = 20;
+
+const char moves[5] = { 'n', 's', 'e', 'w', 'o' };
 
 enum BuildingType
 {
@@ -335,6 +341,97 @@ public:
 	inline int level_of_enemy_unit() { return is_occupied_by_enemy_unit()? unit->level : 0; }
 	inline int level_of_ally_unit() { return is_occupied_by_ally_unit() ? unit->level : 0; }
 };
+
+class Individual
+{
+public:
+	Position unit1_starting_position;
+	Position unit2_starting_position;
+	char moves_unit1[GA_TURNS];
+	char moves_unit2[GA_TURNS];
+	double fitness;
+	Individual() {}
+	Individual(const vector<Position> available_starting_positions)
+	{
+		unit1_starting_position = available_starting_positions[rand() % available_starting_positions.size()];
+		unit2_starting_position = positions_around(unit1_starting_position)[rand() % available_starting_positions.size()];
+
+		for (int i = 0; i < GA_TURNS; i++)
+		{
+			moves_unit1[i] = moves[rand() % 5];
+			moves_unit2[i] = moves[rand() % 5];
+		}
+	}
+	Individual(const Position& pos1, const Position& pos2, char moves_unit1[GA_TURNS], char moves_unit2[GA_TURNS])
+	{
+		this->unit1_starting_position = pos1;
+		this->unit2_starting_position = pos2;
+		copy(moves_unit1, moves_unit1 + GA_POPULATION_SIZE, this->moves_unit1);
+		copy(moves_unit2, moves_unit2 + GA_POPULATION_SIZE, this->moves_unit2);
+		fitness = 0.0;
+	}
+	Individual mate(const Individual& par2, const vector<Position> available_starting_positions)
+	{
+		// chromosome for offspring 
+		Position offspring_unit1_starting_position;
+		Position offspring_unit2_starting_position;
+
+		char offspring_moves_unit1[GA_TURNS];
+		char offspring_moves_unit2[GA_TURNS];
+
+		float p = ( rand() % 100 ) / 100.0;
+		if (p < 0.45)
+		{
+			offspring_unit1_starting_position = this->unit1_starting_position;
+			offspring_unit2_starting_position = this->unit2_starting_position;
+		}
+		else if (p < 0.90)
+		{
+			offspring_unit1_starting_position = par2.unit1_starting_position;
+			offspring_unit2_starting_position = par2.unit2_starting_position;
+		}
+		else
+		{
+			offspring_unit1_starting_position = available_starting_positions[rand() % available_starting_positions.size()];
+			offspring_unit2_starting_position = available_starting_positions[rand() % available_starting_positions.size()];
+		}
+
+		for (int i = 0; i < GA_TURNS; ++i)
+		{
+			p = (rand() % 100) / 100.0;
+			if (p < 0.45)
+			{
+				offspring_moves_unit1[i] = this->moves_unit1[i];
+				offspring_moves_unit2[i] = this->moves_unit2[i];
+			}
+			else if (p < 0.90)
+			{
+				offspring_moves_unit1[i] = par2.moves_unit1[i];
+				offspring_moves_unit2[i] = par2.moves_unit2[i];
+			}
+			else
+			{
+				offspring_moves_unit1[i] = moves[rand() % 5];
+				offspring_moves_unit2[i] = moves[rand() % 5];
+			}
+		}
+
+		return Individual(offspring_unit1_starting_position, offspring_unit2_starting_position, offspring_moves_unit1, offspring_moves_unit2);
+	};
+	string print()
+	{
+		string s = "";
+		s += unit1_starting_position.print() + ", " + unit2_starting_position.print() + " ";
+		for (int i = 0; i < GA_TURNS; ++i)
+			s += moves_unit1[i];
+		s += ", ";
+		for (int i = 0; i < GA_TURNS; ++i)
+			s += moves_unit2[i];
+		s += ", fitness: " + ((fitness > -DBL_MAX) ? to_string(fitness) : "#");
+		return s;
+	}
+};
+bool operator<(const Individual &ind1, const Individual &ind2) { return ind1.fitness > ind2.fitness; }
 
 class Game
 {
@@ -2007,7 +2104,7 @@ public:
 				cuts.clear();
 				for (auto& position : get_frontier_spawn_ally(1))
 				{
-					auto pair = search({ position }, 4, true);
+					auto pair = search({ position }, 5, true);
 
 					if (pair.first > 0.0)
 						cuts.emplace(make_shared<vector<Position>>(pair.second), pair.first);
@@ -2253,12 +2350,147 @@ public:
 
 		return false;
 	}
+
+
+	// Brute force first moves
+	vector<Position> spawnable_positions_around(const Position& position)
+	{
+		vector<Position> positions;
+
+		Position north_position = position.north_position();
+		if (get_cell_info(north_position) == 'O' && north_position != position)
+			positions.push_back(north_position);
+
+		Position south_position = position.south_position();
+		if (get_cell_info(south_position) == 'O' && south_position != position)
+			positions.push_back(south_position);
+
+		Position east_position = position.east_position();
+		if (get_cell_info(east_position) == 'O' && east_position != position)
+			positions.push_back(east_position);
+
+		Position west_position = position.west_position();
+		if (get_cell_info(west_position) == 'O' && west_position != position)
+			positions.push_back(west_position);
+
+		return positions;
+	}
+	Position compute_next_position(char move, const Position& starting_position)
+	{
+		switch (move)
+		{
+		case 'n':
+			return Position(starting_position.x, min(starting_position.y + 1, height));
+		case 's':
+			return Position(starting_position.x, max(starting_position.y - 1, 0));
+		case 'e':
+			return Position(min(starting_position.x + 1, width), starting_position.y);
+		case 'w':
+			return Position(max(starting_position.x - 1, 0), starting_position.y);
+		case 'o':
+			return Position(starting_position.x, starting_position.y);
+		default:
+			break;
+		}
+	}
+	double compute_fitness(Individual& individual)
+	{
+		Position next_position_unit1 = individual.unit1_starting_position;
+		Position next_position_unit2 = individual.unit2_starting_position;
+
+		if (next_position_unit1 == next_position_unit2)
+			return -DBL_MAX;
+
+		unordered_set<Position, HashPosition> positions_visited;
+		for (int i = 0; i < GA_TURNS; i++)
+		{
+			next_position_unit1 = compute_next_position(individual.moves_unit1[i], next_position_unit1);
+			next_position_unit2 = compute_next_position(individual.moves_unit2[i], next_position_unit2);
+
+			if (next_position_unit1 == next_position_unit2)
+				return -DBL_MAX;
+
+			if (get_cell_info(next_position_unit1) == '#' || get_cell_info(next_position_unit2) == '#')
+				return -DBL_MAX;
+
+			positions_visited.emplace(next_position_unit1);
+			positions_visited.emplace(next_position_unit2);
+		}
+
+		return positions_visited.size();
+	};
+	void genetic_algorithm()
+	{
+		Stopwatch s("Find cuts");
+
+		vector<Position> available_starting_positions = get_frontier_spawn_ally(1);
+
+		Individual population[GA_POPULATION_SIZE];
+		for (int i = 0; i < GA_POPULATION_SIZE; i++)
+		{
+			Individual individual(available_starting_positions);
+			individual.fitness = compute_fitness(individual);
+			population[i] = individual;
+		}
+
+		int generation = 0;
+		while (generation++ < 100)
+		{
+			sort(population, population + GA_POPULATION_SIZE);
+
+			Individual new_generation[GA_POPULATION_SIZE];
+			copy(population, population + (10 * GA_POPULATION_SIZE) / 100, new_generation);
+
+			//cerr << "Generation: " << generation << " ";
+			//cerr << "Fitness: " << population[0].fitness << endl;
+
+			//cerr << "pop start" << endl;
+			//for (int i = 0; i < GA_POPULATION_SIZE; ++i)
+			//	cerr << population[i].print() << endl;
+			//cerr << "new gen start" << endl;
+			//for (int i = 0; i < GA_POPULATION_SIZE; ++i)
+			//	cerr << new_generation[i].print() << endl;
+
+			for (int i = (10 * GA_POPULATION_SIZE) / 100; i < GA_POPULATION_SIZE; i++)
+			{
+				Individual parent1 = population[rand() % (50 * GA_POPULATION_SIZE) / 100];
+				Individual parent2 = population[rand() % (50 * GA_POPULATION_SIZE) / 100];
+				Individual offspring = parent1.mate(parent2, available_starting_positions);
+				offspring.fitness = compute_fitness(offspring);
+				new_generation[i] = offspring;
+
+				//cerr << "Mating " << i << " produced " << offspring.print() << endl;
+			}
+
+			//cerr << "new gen after mating" << endl;
+			//for (int i = 0; i < GA_POPULATION_SIZE; ++i)
+			//	cerr << new_generation[i].print() << endl;
+			//cerr << "population before copy" << endl;
+			//for (int i = 0; i < GA_POPULATION_SIZE; ++i)
+			//	cerr << population[i].print() << endl;
+
+			copy(new_generation, new_generation + GA_POPULATION_SIZE, population);
+
+			//cerr << "population after copy" << endl;
+			//for (int i = 0; i < GA_POPULATION_SIZE; ++i)
+			//	cerr << population[i].print() << endl;
+
+			generation++;
+		}
+
+		sort(population, population + GA_POPULATION_SIZE);
+		cerr << "Generation: " << generation << "\t";
+		cerr << "Fitness: " << population[0].fitness << "\n";
+		cerr << "Best candidate: " << population[0].print() << endl;
+	}
 };
 
 int main()
 {
 	Game g;
 	g.init();
+
+	srand(1);
 
 	while (true)
 	{
@@ -2267,6 +2499,12 @@ int main()
 			Stopwatch s("Turn total time");
 
 			g.update_gamestate();
+
+			if (g.turn == 1)
+			{
+				g.genetic_algorithm();
+				return 1;
+			}
 
 			g.move_units();
 			g.attempt_chainkill();
