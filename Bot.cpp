@@ -1267,7 +1267,8 @@ public:
 		}
 		else if (level == 2)
 		{
-			return nbr_units_ally_of_level(2) <= 0;
+		    return false;
+			//return nbr_units_ally_of_level(2) <= 0;
 		}
 		else if (level == 3)
 		{
