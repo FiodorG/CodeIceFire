@@ -7,6 +7,7 @@
 #include <unordered_map>
 #include <algorithm>
 #include <queue>
+#include <iterator>
 #include <functional>
 #include <utility>
 #include <array>
@@ -21,6 +22,10 @@
 
 using namespace std;
 
+#define GA_TURNS 6
+#define GA_POPULATION_SIZE 100
+#define GA_MAX_GENERATIONS 800
+
 const int height = 12;
 const int width = 12;
 const int tower_cost = 15;
@@ -30,6 +35,8 @@ const int level_3_cost = 30;
 const int level_1_upkeep = 1;
 const int level_2_upkeep = 4;
 const int level_3_upkeep = 20;
+
+const char moves[5] = { 'n', 's', 'e', 'w', 'o' };
 
 enum BuildingType
 {
@@ -156,10 +163,10 @@ public:
 	bool operator!=(const Position& rhs) { return x != rhs.x || y != rhs.y; } const
 
 	inline static int distance(const Position& lhs, const Position& rhs) { return abs(lhs.x - rhs.x) + abs(lhs.y - rhs.y); }
-	inline Position north_position() { return (this->y > 0)? Position(this->x, this->y - 1) : Position(*this); }
-	inline Position south_position() { return (this->y < height - 1)? Position(this->x, this->y + 1) : Position(*this); }
-	inline Position east_position() { return (this->x < width - 1) ? Position(this->x + 1, this->y) : Position(*this); }
-	inline Position west_position() { return (this->x > 0) ? Position(this->x - 1, this->y) : Position(*this); }
+	inline Position north_position() const { return (this->y > 0)? Position(this->x, this->y - 1) : Position(*this); }
+	inline Position south_position() const { return (this->y < height - 1)? Position(this->x, this->y + 1) : Position(*this); }
+	inline Position east_position() const { return (this->x < width - 1) ? Position(this->x + 1, this->y) : Position(*this); }
+	inline Position west_position() const { return (this->x > 0) ? Position(this->x - 1, this->y) : Position(*this); }
 	inline void debug() { cerr << "(" << x << "," << y << ")" << endl; }
 	inline string print() const { return "(" + to_string(x) + "," + to_string(y) + ")"; }
 };
@@ -336,6 +343,74 @@ public:
 	inline int level_of_ally_unit() { return is_occupied_by_ally_unit() ? unit->level : 0; }
 };
 
+class Individual
+{
+public:
+	Position unit1_starting_position;
+	Position unit2_starting_position;
+	char moves_unit1[GA_TURNS];
+	char moves_unit2[GA_TURNS];
+	double fitness;
+	Individual() {}
+	Individual(int fake_init)
+	{
+		for (int i = 0; i < GA_TURNS; i++)
+		{
+			moves_unit1[i] = moves[rand() % 5];
+			moves_unit2[i] = moves[rand() % 5];
+		}
+	}
+	Individual(const Position& pos1, const Position& pos2, char moves_unit1[GA_TURNS], char moves_unit2[GA_TURNS])
+	{
+		this->unit1_starting_position = pos1;
+		this->unit2_starting_position = pos2;
+		copy(moves_unit1, moves_unit1 + GA_TURNS, this->moves_unit1);
+		copy(moves_unit2, moves_unit2 + GA_TURNS, this->moves_unit2);
+		fitness = 0.0;
+	}
+	Individual mate(const Individual& par2, const Position& pos1, const Position& pos2)
+	{
+		char offspring_moves_unit1[GA_TURNS];
+		char offspring_moves_unit2[GA_TURNS];
+
+		for (int i = 0; i < GA_TURNS; ++i)
+		{
+			float p = (rand() % 100) / 100.0;
+			if (p < 0.4)
+			{
+				offspring_moves_unit1[i] = this->moves_unit1[i];
+				offspring_moves_unit2[i] = this->moves_unit2[i];
+			}
+			else if (p < 0.8)
+			{
+				offspring_moves_unit1[i] = par2.moves_unit1[i];
+				offspring_moves_unit2[i] = par2.moves_unit2[i];
+			}
+			else
+			{
+				offspring_moves_unit1[i] = moves[rand() % 5];
+				offspring_moves_unit2[i] = moves[rand() % 5];
+			}
+		}
+
+		return Individual(pos1, pos2, offspring_moves_unit1, offspring_moves_unit2);
+	}
+
+	string print()
+	{
+		string s = "";
+		s += unit1_starting_position.print() + ", " + unit2_starting_position.print() + " ";
+		for (int i = 0; i < GA_TURNS; ++i)
+			s += moves_unit1[i];
+		s += ", ";
+		for (int i = 0; i < GA_TURNS; ++i)
+			s += moves_unit2[i];
+		s += ", fitness: " + ((fitness > -DBL_MAX) ? to_string(fitness) : "#");
+		return s;
+	}
+};
+bool operator<(const Individual &ind1, const Individual &ind2) { return ind1.fitness > ind2.fitness; }
+
 class Game
 {
 public:
@@ -385,6 +460,10 @@ public:
 	int ally_towers_around[width][height];
 
 	bool close_to_enemy;
+	pair<vector<Position>, vector<Position>> ga_best_paths;
+	bool use_ga;
+	shared_ptr<Unit> unit1;
+	shared_ptr<Unit> unit2;
 
 	// Utilities
 	inline Cell& get_cell(const Position& position) { return cells[position.y][position.x]; }
@@ -616,12 +695,14 @@ public:
 
 		center = Position(5, 5);
 		turn = 0;
+		use_ga = true;
 	}
 	void update_game()
 	{
 		Stopwatch s("Update game");
 
 		turn++;
+		cerr << "Turn: " << turn << endl;
 
 		units.clear();
 		buildings.clear();
@@ -1258,16 +1339,17 @@ public:
 	{
 		if (level == 1)
 		{
-		    for (auto& position_ally : positions_ally)
+			for (auto& position_ally : positions_ally)
 				for (auto& position_enemy : positions_enemy)
 					if (get_distance(position_ally, position_enemy) <= 1)
 						return false;
-		    
+
 			return nbr_units_ally_of_level(1) <= 8;
 		}
 		else if (level == 2)
 		{
-		    return false;
+			return false;
+
 			//return nbr_units_ally_of_level(2) <= 0;
 		}
 		else if (level == 3)
@@ -2259,12 +2341,274 @@ public:
 
 		return false;
 	}
+
+
+	// Brute force first moves
+	pair<Position, Position> get_random_starting_position(const Individual& parent1, const Individual& parent2, const vector<Position>& available_starting_positions, const unordered_map<Position, vector<Position>, HashPosition>& spawnable_positions)
+	{
+		Position unit1_starting_position;
+		Position unit2_starting_position;
+
+		float p = (rand() % 100) / 100.0;
+		if (p < 0.4)
+		{
+			unit1_starting_position = parent1.unit1_starting_position;
+			unit2_starting_position = parent1.unit2_starting_position;
+		}
+		else if (p < 0.8)
+		{
+			unit1_starting_position = parent2.unit1_starting_position;
+			unit2_starting_position = parent2.unit2_starting_position;
+		}
+		else
+		{
+			unit1_starting_position = available_starting_positions[rand() % available_starting_positions.size()];
+			unit2_starting_position = spawnable_positions.at(unit1_starting_position)[rand() % spawnable_positions.at(unit1_starting_position).size()];
+		}
+
+		return make_pair(unit1_starting_position, unit2_starting_position);
+	}
+	vector<Position> spawnable_positions_around(const Position& position)
+	{
+		vector<Position> positions;
+
+		Position north_position = position.north_position();
+		if (get_cell_info(north_position) != '#' && get_cell_info(north_position) != 'O' && north_position != position)
+			positions.push_back(north_position);
+
+		Position south_position = position.south_position();
+		if (get_cell_info(south_position) != '#' && get_cell_info(south_position) != 'O' && south_position != position)
+			positions.push_back(south_position);
+
+		Position east_position = position.east_position();
+		if (get_cell_info(east_position) != '#' && get_cell_info(east_position) != 'O' && east_position != position)
+			positions.push_back(east_position);
+
+		Position west_position = position.west_position();
+		if (get_cell_info(west_position) != '#' && get_cell_info(west_position) != 'O' && west_position != position)
+			positions.push_back(west_position);
+
+		return positions;
+	}
+	Position compute_next_position(char move, const Position& starting_position)
+	{
+		switch (move)
+		{
+		case 'n':
+			return Position(starting_position.x, max(starting_position.y - 1, 0));
+		case 's':
+			return Position(starting_position.x, min(starting_position.y + 1, height - 1));
+		case 'e':
+			return Position(min(starting_position.x + 1, width - 1), starting_position.y);
+		case 'w':
+			return Position(max(starting_position.x - 1, 0), starting_position.y);
+		case 'o':
+			return Position(starting_position.x, starting_position.y);
+		default:
+			break;
+		}
+	}
+	double compute_fitness(Individual& individual, const vector<Position>& starting_positions)
+	{
+		Position next_position_unit1 = individual.unit1_starting_position;
+		Position next_position_unit2 = individual.unit2_starting_position;
+
+		if (next_position_unit1 == next_position_unit2)
+			return -DBL_MAX;
+
+		unordered_set<Position, HashPosition> positions_visited(starting_positions.begin(), starting_positions.end());
+		positions_visited.emplace(next_position_unit1);
+		positions_visited.emplace(next_position_unit2);
+		for (int i = 0; i < GA_TURNS; i++)
+		{
+			next_position_unit1 = compute_next_position(individual.moves_unit1[i], next_position_unit1);
+			next_position_unit2 = compute_next_position(individual.moves_unit2[i], next_position_unit2);
+
+			if (next_position_unit1 == next_position_unit2)
+				return -DBL_MAX;
+
+			if (get_cells_level_ally(next_position_unit1) != 1 || get_cells_level_ally(next_position_unit2) != 1)
+				return -DBL_MAX;
+
+			positions_visited.emplace(next_position_unit1);
+			positions_visited.emplace(next_position_unit2);
+		}
+
+		return positions_visited.size() * 100.0 - get_distance(next_position_unit1, hq_enemy->p) - get_distance(next_position_unit2, hq_enemy->p);
+	};
+	pair<vector<Position>, vector<Position>> get_optimal_paths(const Individual& individual)
+	{
+		vector<Position> positions_unit1 = { individual.unit1_starting_position };
+		vector<Position> positions_unit2 = { individual.unit2_starting_position };
+
+		Position next_position_unit1 = individual.unit1_starting_position;
+		Position next_position_unit2 = individual.unit2_starting_position;
+
+		for (int i = 0; i < GA_TURNS; i++)
+		{
+			next_position_unit1 = compute_next_position(individual.moves_unit1[i], next_position_unit1);
+			next_position_unit2 = compute_next_position(individual.moves_unit2[i], next_position_unit2);
+
+			positions_unit1.push_back(next_position_unit1);
+			positions_unit2.push_back(next_position_unit2);
+		}
+
+		return make_pair(positions_unit1, positions_unit2);
+	}
+	void execute_genetic_algorithm()
+	{
+		if (turn == 1)
+		{
+			ga_best_paths = genetic_algorithm();
+
+			commands.push_back(Command(TRAIN, 1, ga_best_paths.first[0]));
+			commands.push_back(Command(TRAIN, 1, ga_best_paths.second[0]));
+
+			print_vector_positions(ga_best_paths.first, "First path");
+			print_vector_positions(ga_best_paths.second, "Second path");
+		}
+		else
+		{
+			if (turn == 2)
+			{
+				for (auto& unit : units_ally)
+					if (unit->p == ga_best_paths.first[0])
+					{
+						cerr << "Found unit1: " << (unit->p).print() << endl;
+						unit1 = unit;
+						break;
+					}
+
+				for (auto& unit : units_ally)
+					if (unit->p == ga_best_paths.second[0])
+					{
+						cerr << "Found unit2: " << (unit->p).print() << endl;
+						unit2 = unit;
+						break;
+					}
+			}
+
+			commands.push_back(Command(MOVE, unit1->id, ga_best_paths.first[turn - 1]));
+			commands.push_back(Command(MOVE, unit2->id, ga_best_paths.second[turn - 1]));
+
+			refresh_gamestate_for_movement(unit1, ga_best_paths.first[turn - 1]);
+			refresh_gamestate_for_movement(unit2, ga_best_paths.second[turn - 1]);
+
+			if (gold_ally >= 10)
+			{
+				cerr << "Can spawn unit3" << endl;
+				vector<Position> frontier = get_frontier_spawn_ally(1);
+				print_vector_positions(frontier, "pos for unit3");
+
+				Position best_position_unit3 = frontier[0];
+				int best_distance_to_enemy_hq = 1000;
+
+				for (auto& pos : frontier)
+				if (
+					find(ga_best_paths.first.begin(), ga_best_paths.first.end(), pos) == ga_best_paths.first.end() &&
+					find(ga_best_paths.second.begin(), ga_best_paths.second.end(), pos) == ga_best_paths.second.end() &&
+					get_distance(pos, hq_enemy->p) < best_distance_to_enemy_hq
+					)
+				{
+					best_position_unit3 = pos;
+					best_distance_to_enemy_hq = get_distance(pos, hq_enemy->p);
+				}
+				cerr << "Best pos for unit3: " << best_position_unit3.print() << endl;
+
+				commands.push_back(Command(TRAIN, 1, best_position_unit3));
+				use_ga = false;
+			}
+		}
+	}
+	pair<vector<Position>, vector<Position>> genetic_algorithm()
+	{
+		Stopwatch s("GA");
+
+		vector<Position> available_starting_positions = get_frontier_spawn_ally(1);
+		unordered_map<Position, vector<Position>, HashPosition> spawnable_positions;
+		for (auto& pos : available_starting_positions)
+			spawnable_positions[pos] = spawnable_positions_around(pos);
+
+		//print_vector_positions(available_starting_positions, "starting pos");
+		//print_vector_positions(spawnable_positions_around(Position(10, 10)), "around 1010");
+
+		Individual population[GA_POPULATION_SIZE];
+		for (int i = 0; i < GA_POPULATION_SIZE; i++)
+		{
+			Individual individual(1);
+
+			individual.unit1_starting_position = available_starting_positions[rand() % available_starting_positions.size()];
+			individual.unit2_starting_position = spawnable_positions.at(individual.unit1_starting_position)[rand() % spawnable_positions.at(individual.unit1_starting_position).size()];
+			individual.fitness = compute_fitness(individual, positions_ally);
+			population[i] = individual;
+		}
+
+		//cerr << "pop start" << endl;
+		//for (int i = 0; i < GA_POPULATION_SIZE; ++i)
+		//	cerr << population[i].print() << endl;
+
+		int generation = 0;
+		while (generation++ < GA_MAX_GENERATIONS)
+		{
+			sort(population, population + GA_POPULATION_SIZE);
+
+			Individual new_generation[GA_POPULATION_SIZE];
+			copy(population, population + (10 * GA_POPULATION_SIZE) / 100, new_generation);
+
+			//cerr << "Generation: " << generation << " ";
+			//cerr << "Fitness: " << population[0].fitness << endl;
+
+			//cerr << "pop start" << endl;
+			//for (int i = 0; i < GA_POPULATION_SIZE; ++i)
+			//	cerr << population[i].print() << endl;
+			//cerr << "new gen start" << endl;
+			//for (int i = 0; i < GA_POPULATION_SIZE; ++i)
+			//	cerr << new_generation[i].print() << endl;
+
+			for (int i = (10 * GA_POPULATION_SIZE) / 100; i < GA_POPULATION_SIZE; i++)
+			{
+				Individual parent1 = population[rand() % (50 * GA_POPULATION_SIZE) / 100];
+				Individual parent2 = population[rand() % (50 * GA_POPULATION_SIZE) / 100];
+				auto starting_positions = get_random_starting_position(parent1, parent2, available_starting_positions, spawnable_positions);
+				new_generation[i] = parent1.mate(parent2, starting_positions.first, starting_positions.second);
+				new_generation[i].fitness = compute_fitness(new_generation[i], positions_ally);
+
+				//cerr << "Mating " << i << " produced " << offspring.print() << endl;
+			}
+
+			//cerr << "new gen after mating" << endl;
+			//for (int i = 0; i < GA_POPULATION_SIZE; ++i)
+			//	cerr << new_generation[i].print() << endl;
+			//cerr << "population before copy" << endl;
+			//for (int i = 0; i < GA_POPULATION_SIZE; ++i)
+			//	cerr << population[i].print() << endl;
+
+			copy(new_generation, new_generation + GA_POPULATION_SIZE, population);
+
+			//cerr << "population after copy" << endl;
+			//for (int i = 0; i < GA_POPULATION_SIZE; ++i)
+			//	cerr << population[i].print() << endl;
+		}
+
+		sort(population, population + GA_POPULATION_SIZE);
+		cerr << "Generation: " << generation << "\t";
+		cerr << "Fitness: " << population[0].fitness << "\n";
+		cerr << "Best candidate: " << population[0].print() << endl;
+
+		return get_optimal_paths(population[0]);
+
+		//cerr << "pop end" << endl;
+		//for (int i = 0; i < 10 * GA_POPULATION_SIZE / 100; ++i)
+		//	cerr << population[i].print() << endl;
+	}
 };
 
 int main()
 {
 	Game g;
 	g.init();
+
+	srand(1);
 
 	while (true)
 	{
@@ -2273,6 +2617,12 @@ int main()
 			Stopwatch s("Turn total time");
 
 			g.update_gamestate();
+
+			if (g.use_ga)
+			{
+				g.execute_genetic_algorithm();
+				goto send_commands;
+			}
 
 			g.move_units();
 			g.attempt_chainkill();
@@ -2285,6 +2635,7 @@ int main()
 
 			g.debug();
 
+			send_commands:
 			g.send_commands();
 		}
 	}
