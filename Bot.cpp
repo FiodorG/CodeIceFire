@@ -1258,6 +1258,11 @@ public:
 	{
 		if (level == 1)
 		{
+		    for (auto& position_ally : positions_ally)
+				for (auto& position_enemy : positions_enemy)
+					if (get_distance(position_ally, position_enemy) <= 1)
+						return false;
+		    
 			return nbr_units_ally_of_level(1) <= 8;
 		}
 		else if (level == 2)
@@ -2007,7 +2012,7 @@ public:
 				cuts.clear();
 				for (auto& position : get_frontier_spawn_ally(1))
 				{
-					auto pair = search({ position }, 4, true);
+					auto pair = search({ position }, 5, true);
 
 					if (pair.first > 0.0)
 						cuts.emplace(make_shared<vector<Position>>(pair.second), pair.first);
