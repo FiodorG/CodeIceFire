@@ -1271,7 +1271,7 @@ public:
 				score += enemy_on_cell * 20.0;
 				score += enemy_building_on_cell * 20.0;
 				score += enemy_territory * 10.0;
-				score += close_to_enemy * allies_at_distance[pos.y][pos.x] * 10.0;
+				//score += close_to_enemy * allies_at_distance[pos.y][pos.x] * 10.0;
 
 				return score;
 			}
