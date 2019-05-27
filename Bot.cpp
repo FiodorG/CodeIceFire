@@ -2176,7 +2176,7 @@ public:
 				cerr << "Chain: " << s1 << "Score: " << t.second << " Cost:" << get_cut_cost(*(t.first), true) << endl;
 			}
 
-			if (score < 0.0)
+			if (score < 5.0)
 				return;
 
 			if (cost <= (double)gold_ally)
@@ -2263,9 +2263,6 @@ public:
 			}
 
 			cut_gain += score_graph(forbidden);
-
-			if (forbidden.size() == 1 && cut_cost == 30)
-				return -DBL_MAX;
 
 			//string s1 = "";
 			//for (auto& t : forbidden)
