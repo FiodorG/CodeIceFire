@@ -1287,7 +1287,7 @@ public:
 		bool close_to_enemy = false;
 		for (auto& position_ally : positions_ally)
 			for (auto& position_enemy : positions_enemy)
-				if (get_distance(position_ally, position_enemy) <= 1)
+				if (get_distance(position_ally, position_enemy) <= 2)
 				{
 					close_to_enemy = true;
 					goto can_spawn_tower;
@@ -2264,6 +2264,9 @@ public:
 
 			cut_gain += score_graph(forbidden);
 
+			if (forbidden.size() == 1 && cut_cost == 30)
+				return -DBL_MAX;
+
 			//string s1 = "";
 			//for (auto& t : forbidden)
 			//	s1 += t.print() + ", ";
@@ -2707,7 +2710,7 @@ int main()
 
 			g.update_gamestate();
 
-			if (false)
+			if (g.use_ga)
 			{
 				g.execute_genetic_algorithm();
 				goto send_commands;
@@ -2719,7 +2722,7 @@ int main()
 			
 			g.build_towers();
 
-			g.train_units_on_cuts();
+			//g.train_units_on_cuts();
 			g.train_units();
 
 			g.debug();
