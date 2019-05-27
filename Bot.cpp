@@ -224,15 +224,6 @@ void print_vector_vector(int vv[][height])
 		cerr << endl;
 	}
 }
-void print_vector_vector(double vv[][height])
-{
-	for (int i = 0; i < width; ++i)
-	{
-		for (int j = 0; j < width; ++j)
-			cerr << vv[i][j] << " ";
-		cerr << endl;
-	}
-}
 
 class Objective
 {
@@ -467,7 +458,6 @@ public:
 	double cuts_enemy[width][height];
 	int enemy_towers_around[width][height];
 	int ally_towers_around[width][height];
-	double reactivating_positions[width][height];
 
 	bool close_to_enemy;
 	pair<vector<Position>, vector<Position>> ga_best_paths;
@@ -487,7 +477,6 @@ public:
 	inline int get_enemy_towers_around(const Position& position) { return enemy_towers_around[position.y][position.x]; }
 	inline int get_ally_towers_around(const Position& position) { return ally_towers_around[position.y][position.x]; }
 	inline double get_score_enemy(const Position& position) { return score_enemy[position.y][position.x]; }
-	inline double get_reactivating_positions(const Position& position) { return reactivating_positions[position.y][position.x]; }
 	inline vector<Position>& get_adjacency_list(const Position& position) { return adjacency_list.at(position); }
 	inline vector<Position>& get_adjacency_list_position_enemy(const Position& position) { return adjacency_list_position_enemy.at(position); }
 
@@ -688,6 +677,8 @@ public:
 		Stopwatch s("Debug");
 
 		for_each(units_ally.begin(), units_ally.end(), [](shared_ptr<Unit>& u) { u->debug(); });
+
+		//print_vector_vector(cells_level_ally);
 	}
 	void init() 
 	{
@@ -1151,53 +1142,6 @@ public:
 
 			adjacency_list_position_ally[position] = positions;
 		}
-	}
-	void compute_reactivating_positions()
-	{
-		for (int i = 0; i < width; i++)
-			for (int j = 0; j < height; j++)
-			{
-				Position position(i, j);
-				reactivating_positions[j][i] = 0.0;
-
-				if (get_cell_info(position) != 'x' && get_cell_info(position) != 'X' && get_cell_info(position) != '.')
-					continue;
-
-				unordered_set<Position, HashPosition> graph;
-
-				Position north_position = position.north_position();
-				if (get_cell_info(north_position) == 'o')
-				{
-					vector<Position> graph_north = graph_of_inactive_nodes(north_position);
-					copy(graph_north.begin(), graph_north.end(), inserter(graph, graph.end()));
-				}
-
-				Position south_position = position.south_position();
-				if (get_cell_info(south_position) == 'o')
-				{
-					vector<Position> graph_south = graph_of_inactive_nodes(south_position);
-					copy(graph_south.begin(), graph_south.end(), inserter(graph, graph.end()));
-				}
-
-				Position east_position = position.east_position();
-				if (get_cell_info(east_position) == 'o')
-				{
-					vector<Position> graph_east = graph_of_inactive_nodes(east_position);
-					copy(graph_east.begin(), graph_east.end(), inserter(graph, graph.end()));
-				}
-
-				Position west_position = position.west_position();
-				if (get_cell_info(west_position) == 'o')
-				{
-					vector<Position> graph_west = graph_of_inactive_nodes(west_position);
-					copy(graph_west.begin(), graph_west.end(), inserter(graph, graph.end()));
-				}
-
-				vector<Position> v(graph.size());
-				copy(graph.begin(), graph.end(), v.begin());
-
-				reactivating_positions[j][i] += score_graph(v);
-			}
 	}
 	void send_commands()
 	{
@@ -2176,7 +2120,7 @@ public:
 				cerr << "Chain: " << s1 << "Score: " << t.second << " Cost:" << get_cut_cost(*(t.first), true) << endl;
 			}
 
-			if (score < 5.0)
+			if (score < 0.0)
 				return;
 
 			if (cost <= (double)gold_ally)
@@ -2554,7 +2498,7 @@ public:
 			{
 				cerr << "Can spawn unit3" << endl;
 				vector<Position> frontier = get_frontier_spawn_ally(1);
-				print_vector_positions(frontier, "Positions for unit3");
+				print_vector_positions(frontier, "pos for unit3");
 
 				Position best_position_unit3 = frontier[0];
 				int best_distance_to_enemy_hq = 1000;
@@ -2657,39 +2601,6 @@ public:
 		//for (int i = 0; i < 10 * GA_POPULATION_SIZE / 100; ++i)
 		//	cerr << population[i].print() << endl;
 	}
-
-
-	// Reactivating cells
-	vector<Position> graph_of_inactive_nodes(const Position& source)
-	{
-		bool visited[width][height] = {};
-		visited[source.y][source.x] = true;
-
-		queue<Position> frontier;
-		frontier.push(source);
-
-		vector<Position> graph;
-		graph.reserve(width * height);
-		graph.push_back(source);
-
-		while (!frontier.empty())
-		{
-			Position current = frontier.front();
-			frontier.pop();
-
-			for (const Position& next : adjacency_list[current])
-			{
-				if (!visited[next.y][next.x] && (get_cell_info(next) == 'o'))
-				{
-					visited[next.y][next.x] = true;
-					frontier.push(next);
-					graph.push_back(next);
-				}
-			}
-		}
-
-		return graph;
-	}
 };
 
 int main()
@@ -2719,7 +2630,7 @@ int main()
 			
 			g.build_towers();
 
-			//g.train_units_on_cuts();
+			g.train_units_on_cuts();
 			g.train_units();
 
 			g.debug();
