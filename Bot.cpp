@@ -1354,13 +1354,9 @@ public:
 		}
 		else if (level == 3)
 		{
-			int n = 0;
 			for (auto& position : get_frontier_enemy(1))
 				if (get_cells_level_ally(position) < 3)
-					n++;
-
-			if (n > 1)
-				return false;
+					return false;
 
 			return nbr_units_ally_of_level(3) <= 0;
 		}
@@ -1601,6 +1597,7 @@ public:
 
 			score += cut_ally_distance_one * get_cuts_ally(pos) * 10.0;
 			score += cut_enemy_distance_one * get_cuts_enemy(pos) * 8.0;
+			score += (distance_to_hq_ally <= 12) * distance_to_hq_ally * distance_to_enemy_hq / 3.0;
 
 			score -= distance_to_enemy_hq;
 			score -= distance;
