@@ -688,8 +688,6 @@ public:
 		Stopwatch s("Debug");
 
 		for_each(units_ally.begin(), units_ally.end(), [](shared_ptr<Unit>& u) { u->debug(); });
-
-		print_vector_vector(reactivating_positions);
 	}
 	void init() 
 	{
@@ -1019,8 +1017,6 @@ public:
 					if (get_distance(building->p, Position(i, j)) <= 1)
 						ally_towers_around[j][i] += 1;
 			}
-
-		compute_reactivating_positions();
 	}
 	void compute_adjacency_list_enemy()
 	{
@@ -1291,7 +1287,7 @@ public:
 		bool close_to_enemy = false;
 		for (auto& position_ally : positions_ally)
 			for (auto& position_enemy : positions_enemy)
-				if (get_distance(position_ally, position_enemy) <= 2)
+				if (get_distance(position_ally, position_enemy) <= 1)
 				{
 					close_to_enemy = true;
 					goto can_spawn_tower;
@@ -1637,7 +1633,6 @@ public:
 			bool is_empty = (get_cell_info(pos) == '.');
 			bool cut_ally_distance_one = get_cuts_ally(pos) > 0 && distance <= 1;
 			bool cut_enemy_distance_one = get_cuts_enemy(pos) > 0 && distance <= 1;
-			bool reactivation_distance_one = get_reactivating_positions(pos) > 0.0 && distance <= 1;
 
 			double score = 0.0;
 
@@ -1658,7 +1653,6 @@ public:
 
 			score += cut_ally_distance_one * get_cuts_ally(pos) * 10.0;
 			score += cut_enemy_distance_one * get_cuts_enemy(pos) * 8.0;
-			score += reactivation_distance_one * get_reactivating_positions(pos) * 5.0;
 
 			score -= distance_to_enemy_hq;
 			score -= distance;
@@ -2713,7 +2707,7 @@ int main()
 
 			g.update_gamestate();
 
-			if (g.use_ga)
+			if (false)
 			{
 				g.execute_genetic_algorithm();
 				goto send_commands;
