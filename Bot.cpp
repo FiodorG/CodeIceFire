@@ -1597,7 +1597,6 @@ public:
 
 			score += cut_ally_distance_one * get_cuts_ally(pos) * 10.0;
 			score += cut_enemy_distance_one * get_cuts_enemy(pos) * 8.0;
-			score += (distance_to_hq_ally <= 12) * distance_to_hq_ally * distance_to_enemy_hq / 3.0;
 
 			score -= distance_to_enemy_hq;
 			score -= distance;
@@ -1725,7 +1724,7 @@ public:
 			else if (cell.is_occupied_by_tower())
 				score += 15.0;
 
-			score += 1.0;
+			score += 2.0;
 		}
 
 		return score;
