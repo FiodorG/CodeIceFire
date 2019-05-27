@@ -224,6 +224,24 @@ void print_vector_vector(int vv[][height])
 		cerr << endl;
 	}
 }
+void print_vector_vector(double vv[][height])
+{
+	for (int i = 0; i < width; ++i)
+	{
+		for (int j = 0; j < width; ++j)
+			cerr << vv[i][j] << " ";
+		cerr << endl;
+	}
+}
+void print_vector_vector(char vv[][height])
+{
+	for (int i = 0; i < width; ++i)
+	{
+		for (int j = 0; j < width; ++j)
+			cerr << vv[i][j] << " ";
+		cerr << endl;
+	}
+}
 
 class Objective
 {
@@ -574,21 +592,21 @@ public:
 			if (b->isHQ() && !b->isOwned())
 				return b;
 	}
-	inline bool is_position_attainable(const Position& position)
+	inline bool is_position_attainable(const Position& position, char tag = 'O')
 	{
-		if (get_cell_info(Position(position.x, position.y)) == 'O')
+		if (get_cell_info(Position(position.x, position.y)) == tag)
 			return true;
 
-		if (get_cell_info(Position(position.x, min(position.y + 1, width - 1))) == 'O')
+		if (get_cell_info(Position(position.x, min(position.y + 1, width - 1))) == tag)
 			return true;
 
-		if (get_cell_info(Position(position.x, max(position.y - 1, 0))) == 'O')
+		if (get_cell_info(Position(position.x, max(position.y - 1, 0))) == tag)
 			return true;
 
-		if (get_cell_info(Position(min(position.x + 1, height - 1), position.y)) == 'O')
+		if (get_cell_info(Position(min(position.x + 1, height - 1), position.y)) == tag)
 			return true;
 
-		if (get_cell_info(Position(max(position.x - 1, 0), position.y)) == 'O')
+		if (get_cell_info(Position(max(position.x - 1, 0), position.y)) == tag)
 			return true;
 
 		return false;
@@ -1177,8 +1195,17 @@ public:
 			}
 		}
 
+		vector<Position> chainkill = chainkills_enemy();
+
+		for (auto& pos : chainkill)
+			for (int i = 0; i < width; i++)
+				for (int j = 0; j < height; j++)
+					if (Position::distance(Position(i, j), pos) <= 1 && get_cell_info(Position(i, j)) == 'O')
+						cuts[pos.y][pos.x] += 1000.0;
+
 		double scores[width][height] = {};
-		for (auto& position : get_frontier_ally(3))
+		vector<Position> positions_considered = get_frontier_ally(3);
+		for (auto& position : positions_considered)
 		{
 			int i = position.x;
 			int j = position.y;
@@ -1724,7 +1751,7 @@ public:
 			else if (cell.is_occupied_by_tower())
 				score += 15.0;
 
-			score += 2.0;
+			score += 1.0;
 		}
 
 		return score;
@@ -1866,6 +1893,40 @@ public:
 
 
 	// Chainkill
+	vector<Position> chainkills_enemy()
+	{
+		unordered_map<Position, double, HashPosition> chainkills = dijkstra_chainkill_all_costs_enemy(hq_ally->p);
+
+		if (!chainkills.size())
+			return {};
+
+		double chainkill_cost = DBL_MAX;
+		Position chainkill_start;
+		for (auto& position : chainkills)
+		{
+			if (position.second < chainkill_cost && is_position_attainable(position.first, 'X'))
+			{
+				chainkill_cost = position.second;
+				chainkill_start = position.first;
+			}
+		}
+
+		if (chainkill_cost <= gold_enemy + income_enemy)
+		{
+			vector<Position> chainkill_path = dijkstra_chainkill_path_enemy(chainkill_start, hq_ally->p);
+
+			double score = get_cut_cost(chainkill_path, false);
+
+			if (score > gold_enemy + income_enemy)
+				return {};
+
+			cerr << "Enemy Chainkill start: " << chainkill_start.print() << " cost: " << chainkill_cost << endl;
+
+			return chainkill_path;
+		}
+		else
+			return {};
+	}
 	void attempt_chainkill()
 	{
 		Stopwatch s("Chainkills");
@@ -1906,7 +1967,7 @@ public:
 
 			double score = get_cut_cost(chainkill_path, true);
 
-			if (score >= gold_ally)
+			if (score > gold_ally)
 				return;
 
 			execute_cut(chainkill_path);
@@ -1941,6 +2002,33 @@ public:
 
 		return cost_so_far;
 	}
+	unordered_map<Position, double, HashPosition> dijkstra_chainkill_all_costs_enemy(const Position& source)
+	{
+		MinPriorityQueue<Position, double> frontier;
+		frontier.put(source, 0.0);
+
+		unordered_map<Position, double, HashPosition> cost_so_far;
+		cost_so_far[source] = 10.0;
+
+		while (!frontier.empty())
+		{
+			Position current = frontier.pop();
+
+			for (const Position& next : get_adjacency_list(current))
+				if (get_cell_info(next) != 'X')
+				{
+					double new_cost = cost_so_far[current] + get_cells_level_enemy(next) * 10.0 * (get_cell_info(next) != 'x');
+
+					if ((cost_so_far.find(next) == cost_so_far.end()) || (new_cost < cost_so_far[next]))
+					{
+						cost_so_far[next] = new_cost;
+						frontier.put(next, new_cost);
+					}
+				}
+		}
+
+		return cost_so_far;
+	}
 	vector<Position> dijkstra_chainkill_path(const Position& source, const Position& target)
 	{
 		MinPriorityQueue<Position, double> frontier;
@@ -1960,6 +2048,49 @@ public:
 				if (get_cell_info(next) != 'O')
 				{
 					double new_cost = cost_so_far[current] + get_cells_level_ally(next) * 10.0 * (get_cell_info(next) != 'o');
+
+					if ((cost_so_far.find(next) == cost_so_far.end()) || (new_cost < cost_so_far[next]))
+					{
+						cost_so_far[next] = new_cost;
+						frontier.put(next, new_cost);
+						came_from[next] = current;
+					}
+				}
+		}
+
+		return reconstruct_path(source, target, came_from);
+	}
+	vector<Position> dijkstra_chainkill_path_enemy(const Position& source, const Position& target)
+	{
+		MinPriorityQueue<Position, double> frontier;
+		frontier.put(source, 0.0);
+
+		unordered_map<Position, double, HashPosition> cost_so_far;
+		cost_so_far[source] = 10.0;
+
+		unordered_map<Position, Position, HashPosition> came_from;
+		came_from[source] = source;
+
+		auto adj_list = adjacency_list;
+		if (hq_ally->p == Position(0, 0))
+		{
+			adj_list[hq_ally->p.south_position()].push_back(hq_ally->p);
+			adj_list[hq_ally->p.east_position()].push_back(hq_ally->p);
+		}
+		else
+		{
+			adj_list[hq_ally->p.west_position()].push_back(hq_ally->p);
+			adj_list[hq_ally->p.north_position()].push_back(hq_ally->p);
+		}
+		
+		while (!frontier.empty())
+		{
+			Position current = frontier.pop();
+
+			for (const Position& next : adj_list.at(current))
+				if (get_cell_info(next) != 'X')
+				{
+					double new_cost = cost_so_far[current] + get_cells_level_enemy(next) * 10.0 * (get_cell_info(next) != 'x');
 
 					if ((cost_so_far.find(next) == cost_so_far.end()) || (new_cost < cost_so_far[next]))
 					{
